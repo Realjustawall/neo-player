@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">نئو پلیر</string>
+    <string name="permission_title">موسیقی شما، روی دستگاه شما</string>
+    <string name="permission_body">برای ساخت کتابخانهٔ آفلاین و خصوصی، اجازهٔ دسترسی به صدا را بدهید.</string>
+    <string name="allow_access">اجازهٔ دسترسی</string>
+    <string name="home">خانه</string>
+    <string name="search">جست‌وجو</string>
+    <string name="library">کتابخانه</string>
+    <string name="settings">تنظیمات</string>
+    <string name="songs">آهنگ‌ها</string>
+    <string name="albums">آلبوم‌ها</string>
+    <string name="artists">هنرمندان</string>
+    <string name="genres">سبک‌ها</string>
+    <string name="folders">پوشه‌ها</string>
+    <string name="playlists">فهرست‌های پخش</string>
+    <string name="categories">دسته‌بندی‌ها</string>
+    <string name="recently_added">تازه اضافه‌شده</string>
+    <string name="most_played">بیشترین پخش</string>
+    <string name="liked_songs">آهنگ‌های پسندیده</string>
+    <string name="no_music">موسیقی‌ای پیدا نشد</string>
+    <string name="no_music_body">فایل صوتی به دستگاه اضافه کنید و کتابخانه را دوباره اسکن کنید.</string>
+    <string name="rescan">اسکن دوبارهٔ کتابخانه</string>
+    <string name="search_hint">آهنگ، هنرمند، آلبوم…</string>
+    <string name="now_playing">در حال پخش</string>
+    <string name="lyrics">متن آهنگ</string>
+    <string name="queue">صف پخش</string>
+    <string name="about">درباره</string>
+    <string name="made_by">Made by یک دیوار</string>
+</resources>
