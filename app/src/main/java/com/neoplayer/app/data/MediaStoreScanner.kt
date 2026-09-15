@@ -15,18 +15,18 @@ class MediaStoreScanner(private val context: Context) {
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.ALBUM_ARTIST,
             MediaStore.Audio.Media.YEAR,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.TRACK,
             MediaStore.Audio.Media.COMPOSER,
             MediaStore.Audio.Media.MIME_TYPE,
             MediaStore.Audio.Media.SIZE,
-            MediaStore.Audio.Media.RELATIVE_PATH,
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.Audio.Media.DATE_MODIFIED
         )
+        if (Build.VERSION.SDK_INT >= 29) base += MediaStore.Audio.Media.RELATIVE_PATH
         if (Build.VERSION.SDK_INT >= 30) {
+            base += MediaStore.Audio.Media.ALBUM_ARTIST
             base += MediaStore.Audio.Media.GENRE
             base += MediaStore.Audio.Media.BITRATE
         }
@@ -50,7 +50,7 @@ class MediaStoreScanner(private val context: Context) {
                     artist = text(MediaStore.Audio.Media.ARTIST).ifBlank { "Unknown artist" },
                     album = text(MediaStore.Audio.Media.ALBUM).ifBlank { "Unknown album" },
                     albumId = long(MediaStore.Audio.Media.ALBUM_ID),
-                    albumArtist = text(MediaStore.Audio.Media.ALBUM_ARTIST),
+                    albumArtist = if (Build.VERSION.SDK_INT >= 30) text(MediaStore.Audio.Media.ALBUM_ARTIST) else "",
                     genre = if (Build.VERSION.SDK_INT >= 30) text(MediaStore.Audio.Media.GENRE) else "",
                     year = long(MediaStore.Audio.Media.YEAR).toInt(),
                     durationMs = long(MediaStore.Audio.Media.DURATION),
@@ -60,7 +60,7 @@ class MediaStoreScanner(private val context: Context) {
                     bitrate = if (Build.VERSION.SDK_INT >= 30) long(MediaStore.Audio.Media.BITRATE).toInt() else 0,
                     mimeType = text(MediaStore.Audio.Media.MIME_TYPE),
                     sizeBytes = long(MediaStore.Audio.Media.SIZE),
-                    relativePath = text(MediaStore.Audio.Media.RELATIVE_PATH).trimEnd('/'),
+                    relativePath = if (Build.VERSION.SDK_INT >= 29) text(MediaStore.Audio.Media.RELATIVE_PATH).trimEnd('/') else "Storage",
                     dateAdded = long(MediaStore.Audio.Media.DATE_ADDED),
                     dateModified = long(MediaStore.Audio.Media.DATE_MODIFIED)
                 )

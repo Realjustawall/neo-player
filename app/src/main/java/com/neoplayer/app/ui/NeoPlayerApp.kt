@@ -42,7 +42,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Category
@@ -62,6 +61,7 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Queue
+import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
@@ -357,7 +357,7 @@ private fun CollectionList(vm: MainViewModel, playlistMode: Boolean) {
                 val title = if (value is PlaylistEntity) value.title else (value as CategoryEntity).title
                 val id = if (value is PlaylistEntity) value.id else (value as CategoryEntity).id
                 Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(52.dp).clip(RoundedCornerShape(15.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = .16f)), contentAlignment = Alignment.Center) { Icon(if (playlistMode) Icons.AutoMirrored.Rounded.QueueMusic else Icons.Rounded.Category, null, tint = MaterialTheme.colorScheme.primary) }
+                    Box(Modifier.size(52.dp).clip(RoundedCornerShape(15.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = .16f)), contentAlignment = Alignment.Center) { Icon(if (playlistMode) Icons.Rounded.QueueMusic else Icons.Rounded.Category, null, tint = MaterialTheme.colorScheme.primary) }
                     Text(title, Modifier.weight(1f).padding(14.dp), fontWeight = FontWeight.SemiBold)
                     IconButton({ if (playlistMode) vm.deletePlaylist(id) else vm.deleteCategory(id) }) { Icon(Icons.Rounded.Delete, "Delete") }
                 }
@@ -439,7 +439,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
             Row(Modifier.fillMaxWidth().pointerInput(Unit) { detectVerticalDragGestures(onVerticalDrag = { _, delta -> verticalDrag += delta }, onDragEnd = { if (verticalDrag > 100) close(); verticalDrag = 0f }) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Minimize") }
                 Text(stringResource(R.string.now_playing), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                IconButton({ panel = if (panel == "queue") "player" else "queue" }) { Icon(Icons.AutoMirrored.Rounded.QueueMusic, stringResource(R.string.queue)) }
+                IconButton({ panel = if (panel == "queue") "player" else "queue" }) { Icon(Icons.Rounded.QueueMusic, stringResource(R.string.queue)) }
                 IconButton({ panel = if (panel == "lyrics") "player" else "lyrics" }) { Icon(Icons.Rounded.Lyrics, stringResource(R.string.lyrics)) }
             }
             when (panel) {
