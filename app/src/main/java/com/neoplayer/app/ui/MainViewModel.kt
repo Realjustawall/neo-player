@@ -12,8 +12,12 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -27,13 +31,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val favoriteIds = repository.favorites.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val playlists = repository.playlists.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val categories = repository.categories.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val histories = repository.histories.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val excludedFolders = repository.excludedFolders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val settings = app.settings.values.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
     val playback = app.playback.state
     val query = MutableStateFlow("")
     val results = query.flatMapLatest(repository::search).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val scanning = MutableStateFlow(false)
 
-    fun rescan() = viewModelScope.launch { scanning.value = true; runCatching { repository.rescan() }; scanning.value = false }
+    init {
+        viewModelScope.launch {
+            playback.map { it.current?.mediaId?.toLongOrNull() }.filterNotNull().distinctUntilChanged().collect { id ->
+                delay(30_000)
+                if (playback.value.current?.mediaId?.toLongOrNull() == id && playback.value.playing) repository.recordPlay(id, 30_000)
+            }
+        }
+    }
+
+    fun rescan() = viewModelScope.launch { scanning.value = true; runCatching { repository.rescan(settings.value.minDurationMs) }; scanning.value = false }
     fun play(song: com.neoplayer.app.data.SongEntity, list: List<com.neoplayer.app.data.SongEntity> = songs.value) = app.playback.play(song, list)
     fun togglePlayback() = app.playback.toggle()
     fun next() = app.playback.next()
@@ -54,10 +69,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteCategory(id: Long) = viewModelScope.launch { repository.deleteCategory(id) }
     fun addToCategory(categoryId: Long, songId: Long) = viewModelScope.launch { repository.addToCategory(categoryId, songId) }
     fun setSpeed(speed: Float) = app.playback.setSpeed(speed)
+    fun setSleepTimer(minutes: Int) = app.playback.setSleepTimer(minutes)
+    fun cancelSleepTimer() = app.playback.cancelSleepTimer()
+    fun renamePlaylist(id: Long, title: String) = viewModelScope.launch { if (title.isNotBlank()) repository.renamePlaylist(id, title) }
+    fun updateCategory(id: Long, title: String, description: String) = viewModelScope.launch { if (title.isNotBlank()) repository.updateCategory(id, title, description) }
+    fun playlistSongs(id: Long) = repository.playlistSongs(id)
+    fun categorySongs(id: Long) = repository.categorySongs(id)
+    fun removeFromPlaylist(id: Long, songId: Long) = viewModelScope.launch { repository.removeFromPlaylist(id, songId) }
+    fun removeFromCategory(id: Long, songId: Long) = viewModelScope.launch { repository.removeFromCategory(id, songId) }
+    fun reorderCollection(id: Long, songIds: List<Long>, playlist: Boolean) = viewModelScope.launch { if (playlist) repository.reorderPlaylist(id, songIds) else repository.reorderCategory(id, songIds) }
+    fun excludeFolder(path: String) = viewModelScope.launch { repository.excludeFolder(path); repository.rescan() }
+    fun includeFolder(path: String) = viewModelScope.launch { repository.includeFolder(path); repository.rescan() }
     fun lyrics(id: Long) = repository.lyrics(id)
     fun saveLyrics(id: Long, text: String) = viewModelScope.launch { repository.saveLyrics(LyricsEntity(id, text, synchronized = text.contains(Regex("\\[\\d+:\\d+")))) }
     fun setTheme(value: ThemeMode) = viewModelScope.launch { app.settings.setTheme(value) }
     fun setAccent(value: Accent) = viewModelScope.launch { app.settings.setAccent(value) }
     fun setCustomColor(value: Int) = viewModelScope.launch { app.settings.setCustomColor(value) }
     fun setLanguage(value: String) = viewModelScope.launch { app.settings.setLanguage(value) }
+    fun setMinDuration(value: Long) = viewModelScope.launch { app.settings.setMinDuration(value); repository.rescan(value) }
+    fun setGapless(value: Boolean) = viewModelScope.launch { app.settings.setGapless(value) }
+    fun setCrossfade(value: Int) = viewModelScope.launch { app.settings.setCrossfade(value) }
+    fun setLyricsMode(value: String) = viewModelScope.launch { app.settings.setLyricsMode(value) }
+    fun setLyricsFontSize(value: Int) = viewModelScope.launch { app.settings.setLyricsFontSize(value) }
 }

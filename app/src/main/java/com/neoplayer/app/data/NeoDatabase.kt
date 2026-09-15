@@ -4,11 +4,14 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [SongEntity::class, FavoriteEntity::class, PlaylistEntity::class, PlaylistSongEntity::class,
-        CategoryEntity::class, CategorySongEntity::class, ListeningHistoryEntity::class, LyricsEntity::class],
-    version = 1,
+        CategoryEntity::class, CategorySongEntity::class, ListeningHistoryEntity::class, LyricsEntity::class,
+        ExcludedFolderEntity::class],
+    version = 2,
     exportSchema = true
 )
 abstract class NeoDatabase : RoomDatabase() {
@@ -17,6 +20,12 @@ abstract class NeoDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): NeoDatabase = Room.databaseBuilder(
             context.applicationContext, NeoDatabase::class.java, "neo-player.db"
-        ).fallbackToDestructiveMigration().build()
+        ).addMigrations(MIGRATION_1_2).build()
+
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `excluded_folders` (`path` TEXT NOT NULL, PRIMARY KEY(`path`))")
+            }
+        }
     }
 }

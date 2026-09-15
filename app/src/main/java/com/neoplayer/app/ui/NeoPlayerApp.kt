@@ -3,7 +3,9 @@
 package com.neoplayer.app.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.audiofx.AudioEffect
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -51,6 +53,8 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Lyrics
@@ -91,6 +95,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -229,6 +234,7 @@ private fun ScreenHeader(title: String, subtitle: String? = null, action: (@Comp
 private fun HomeScreen(vm: MainViewModel) {
     val songs by vm.songs.collectAsState()
     val favorites by vm.favoriteIds.collectAsState()
+    val histories by vm.histories.collectAsState()
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
     val greeting = when (hour) { in 5..11 -> "Good morning"; in 12..17 -> "Good afternoon"; else -> "Good evening" }
     LazyColumn(Modifier.fillMaxSize()) {
@@ -241,6 +247,18 @@ private fun HomeScreen(vm: MainViewModel) {
             val liked = songs.filter { favorites.contains(it.id) }.take(8)
             if (liked.isEmpty()) item { HintCard("Tap the heart on a song to build your favorites mix.") }
             items(liked, key = { "liked-${it.id}" }) { SongRow(it, true, vm, liked) }
+            val playCounts = histories.associate { it.songId to it.playCount }
+            val mostPlayed = songs.filter { playCounts.getOrDefault(it.id, 0) > 0 }.sortedByDescending { playCounts[it.id] }.take(8)
+            val neverPlayed = songs.filterNot { playCounts.containsKey(it.id) }.take(8)
+            item { SectionTitle(stringResource(R.string.smart_mixes)) }
+            if (mostPlayed.isNotEmpty()) {
+                item { HintCard(stringResource(R.string.most_played)) }
+                items(mostPlayed, key = { "most-${it.id}" }) { SongRow(it, favorites.contains(it.id), vm, mostPlayed) }
+            }
+            if (neverPlayed.isNotEmpty()) {
+                item { HintCard(stringResource(R.string.never_played)) }
+                items(neverPlayed, key = { "never-${it.id}" }) { SongRow(it, favorites.contains(it.id), vm, neverPlayed) }
+            }
         }
     }
 }
@@ -334,7 +352,12 @@ private fun LibraryScreen(vm: MainViewModel) {
 
 @Composable private fun FolderList(vm: MainViewModel) {
     val folders by vm.folders.collectAsState(); val songs by vm.songs.collectAsState()
-    LazyColumn { items(folders, key = { it.relativePath }) { folder -> LibraryFacetRow(Icons.Rounded.Folder, folder.relativePath.ifBlank { "Storage root" }, "${folder.songCount} songs") { songs.firstOrNull { it.relativePath == folder.relativePath }?.let { vm.play(it, songs.filter { s -> s.relativePath == folder.relativePath }) } } } }
+    LazyColumn { items(folders, key = { it.relativePath }) { folder ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { LibraryFacetRow(Icons.Rounded.Folder, folder.relativePath.ifBlank { "Storage root" }, "${folder.songCount} songs") { songs.firstOrNull { it.relativePath == folder.relativePath }?.let { vm.play(it, songs.filter { s -> s.relativePath == folder.relativePath }) } } }
+            IconButton({ vm.excludeFolder(folder.relativePath) }) { Icon(Icons.Rounded.Close, "Exclude folder") }
+        }
+    } }
 }
 
 @Composable
@@ -350,13 +373,15 @@ private fun LibraryFacetRow(icon: ImageVector, title: String, subtitle: String, 
 private fun CollectionList(vm: MainViewModel, playlistMode: Boolean) {
     val playlists by vm.playlists.collectAsState(); val categories by vm.categories.collectAsState()
     var dialog by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf<Pair<Long, String>?>(null) }
+    selected?.let { value -> CollectionEditor(vm, value.first, value.second, playlistMode) { selected = null }; return }
     val values: List<Any> = if (playlistMode) playlists else categories
     Box(Modifier.fillMaxSize()) {
         LazyColumn { if (values.isEmpty()) item { HintCard(if (playlistMode) "No playlists yet" else "No categories yet") }
             items(values, key = { if (it is PlaylistEntity) "p${it.id}" else "c${(it as CategoryEntity).id}" }) { value ->
                 val title = if (value is PlaylistEntity) value.title else (value as CategoryEntity).title
                 val id = if (value is PlaylistEntity) value.id else (value as CategoryEntity).id
-                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().clickable { selected = id to title }.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(52.dp).clip(RoundedCornerShape(15.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = .16f)), contentAlignment = Alignment.Center) { Icon(if (playlistMode) Icons.Rounded.QueueMusic else Icons.Rounded.Category, null, tint = MaterialTheme.colorScheme.primary) }
                     Text(title, Modifier.weight(1f).padding(14.dp), fontWeight = FontWeight.SemiBold)
                     IconButton({ if (playlistMode) vm.deletePlaylist(id) else vm.deleteCategory(id) }) { Icon(Icons.Rounded.Delete, "Delete") }
@@ -368,10 +393,38 @@ private fun CollectionList(vm: MainViewModel, playlistMode: Boolean) {
     if (dialog) NameDialog(if (playlistMode) "New playlist" else "New category", { dialog = false }) { if (playlistMode) vm.createPlaylist(it) else vm.createCategory(it); dialog = false }
 }
 
-@Composable private fun NameDialog(title: String, dismiss: () -> Unit, save: (String) -> Unit) {
-    var value by remember { mutableStateOf("") }
+@Composable
+private fun CollectionEditor(vm: MainViewModel, id: Long, initialTitle: String, playlist: Boolean, close: () -> Unit) {
+    val flow = remember(id, playlist) { if (playlist) vm.playlistSongs(id) else vm.categorySongs(id) }
+    val tracks by flow.collectAsState(initial = emptyList())
+    var rename by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
+            Text(initialTitle, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+            TextButton({ rename = true }) { Text("Rename") }
+        }
+        if (tracks.isEmpty()) HintCard("Use a song menu to add music to this collection.")
+        LazyColumn { itemsIndexed(tracks, key = { _, song -> song.id }) { index, song ->
+            Row(Modifier.fillMaxWidth().clickable { vm.play(song, tracks) }.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Artwork(song.artworkUri, Modifier.size(48.dp))
+                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text(song.title, maxLines = 1); Text(song.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
+                IconButton({ if (index > 0) vm.reorderCollection(id, tracks.map { it.id }.toMutableList().apply { add(index - 1, removeAt(index)) }, playlist) }, enabled = index > 0) { Icon(Icons.Rounded.KeyboardArrowUp, "Move up") }
+                IconButton({ if (index < tracks.lastIndex) vm.reorderCollection(id, tracks.map { it.id }.toMutableList().apply { add(index + 1, removeAt(index)) }, playlist) }, enabled = index < tracks.lastIndex) { Icon(Icons.Rounded.KeyboardArrowDown, "Move down") }
+                IconButton({ if (playlist) vm.removeFromPlaylist(id, song.id) else vm.removeFromCategory(id, song.id) }) { Icon(Icons.Rounded.Close, "Remove") }
+            }
+        } }
+    }
+    if (rename) NameDialog("Rename", { rename = false }, "Save", initialTitle) {
+        if (playlist) vm.renamePlaylist(id, it) else vm.updateCategory(id, it, "")
+        rename = false
+    }
+}
+
+@Composable private fun NameDialog(title: String, dismiss: () -> Unit, confirmLabel: String = "Create", initialValue: String = "", save: (String) -> Unit) {
+    var value by remember { mutableStateOf(initialValue) }
     AlertDialog(onDismissRequest = dismiss, title = { Text(title) }, text = { OutlinedTextField(value, { value = it }, label = { Text("Name") }, singleLine = true) },
-        confirmButton = { TextButton({ save(value) }, enabled = value.isNotBlank()) { Text("Create") } }, dismissButton = { TextButton(dismiss) { Text("Cancel") } })
+        confirmButton = { TextButton({ save(value) }, enabled = value.isNotBlank()) { Text(confirmLabel) } }, dismissButton = { TextButton(dismiss) { Text("Cancel") } })
 }
 
 @Composable
@@ -455,6 +508,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
     val state by vm.playback.collectAsState(); val item = state.current ?: return
     val favorites by vm.favoriteIds.collectAsState(); val id = item.mediaId.toLongOrNull()
     var speedMenu by remember { mutableStateOf(false) }
+    var sleepMenu by remember { mutableStateOf(false) }
     var horizontalDrag by remember { mutableFloatStateOf(0f) }
     Column(Modifier.fillMaxSize().padding(horizontal = 26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.weight(.15f))
@@ -480,6 +534,13 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
             TextButton({ speedMenu = true }) { Icon(Icons.Rounded.Speed, null); Spacer(Modifier.width(6.dp)); Text("Playback speed") }
             DropdownMenu(speedMenu, { speedMenu = false }) { listOf(.5f, .75f, 1f, 1.25f, 1.5f, 2f).forEach { speed -> DropdownMenuItem({ Text("${speed}×") }, { vm.setSpeed(speed); speedMenu = false }) } }
         }
+        Box {
+            TextButton({ sleepMenu = true }) { Text(stringResource(R.string.sleep_timer)) }
+            DropdownMenu(sleepMenu, { sleepMenu = false }) {
+                listOf(5, 10, 15, 30, 45, 60).forEach { minutes -> DropdownMenuItem({ Text("$minutes min") }, { vm.setSleepTimer(minutes); sleepMenu = false }) }
+                DropdownMenuItem({ Text("Cancel timer") }, { vm.cancelSleepTimer(); sleepMenu = false })
+            }
+        }
         Spacer(Modifier.weight(.15f))
     }
 }
@@ -501,8 +562,15 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
     val lyrics by vm.lyrics(songId).collectAsState(initial = null)
     var editing by remember { mutableStateOf(false) }; var draft by remember(lyrics?.original) { mutableStateOf(lyrics?.original.orEmpty()) }
     val lines = remember(lyrics?.original) { LrcParser.parse(lyrics?.original.orEmpty()) }
+    val context = LocalContext.current
+    val importLrc = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { selected ->
+            runCatching { context.contentResolver.openInputStream(selected)?.bufferedReader()?.use { it.readText() } }
+                .getOrNull()?.let { imported -> draft = imported; editing = true }
+        }
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) { Text(stringResource(R.string.lyrics), Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium); TextButton({ editing = !editing }) { Text(if (editing) "Preview" else "Edit") } }
+        Row(verticalAlignment = Alignment.CenterVertically) { Text(stringResource(R.string.lyrics), Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium); TextButton({ importLrc.launch("*/*") }) { Text(stringResource(R.string.import_lrc)) }; TextButton({ editing = !editing }) { Text(if (editing) "Preview" else "Edit") } }
         if (editing) {
             OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth().weight(1f), label = { Text("Paste text or LRC") })
             Button({ vm.saveLyrics(songId, draft); editing = false }, Modifier.fillMaxWidth().padding(vertical = 12.dp)) { Text("Save lyrics") }
@@ -519,6 +587,9 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
 
 @Composable private fun SettingsScreen(vm: MainViewModel) {
     val settings by vm.settings.collectAsState(); var customDialog by remember { mutableStateOf(false) }
+    val excluded by vm.excludedFolders.collectAsState()
+    val context = LocalContext.current
+    val equalizerIntent = remember { Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply { putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) } }
     LazyColumn(Modifier.fillMaxSize()) {
         item { ScreenHeader(stringResource(R.string.settings), "Offline by design") }
         item { SettingsTitle("Appearance") }
@@ -538,6 +609,14 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
         } }
         item { SettingsTitle("Library") }
         item { SettingsAction(Icons.Rounded.Refresh, stringResource(R.string.rescan), "Refresh changed, added, and removed files", vm::rescan) }
+        item { ChoiceRow("Minimum audio duration", listOf("0s", "10s", "30s", "60s"), listOf(0L, 10_000L, 30_000L, 60_000L).indexOf(settings.minDurationMs).coerceAtLeast(0)) { vm.setMinDuration(listOf(0L, 10_000L, 30_000L, 60_000L)[it]) } }
+        if (excluded.isNotEmpty()) item { Column { Text("Excluded folders", Modifier.padding(horizontal = 20.dp)); excluded.forEach { path -> Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Text(path, Modifier.weight(1f)); TextButton({ vm.includeFolder(path) }) { Text("Include") } } } } }
+        item { SettingsTitle("Playback") }
+        item { ToggleRow("Gapless playback", "Media3 gapless transitions for compatible files", settings.gapless, vm::setGapless) }
+        if (equalizerIntent.resolveActivity(context.packageManager) != null) item { SettingsAction(Icons.Rounded.MusicNote, stringResource(R.string.equalizer), "Open the device audio-effects panel", { context.startActivity(equalizerIntent) }) }
+        item { SettingsTitle("Lyrics") }
+        item { ChoiceRow("Lyrics source", listOf("Auto", "Offline only", "Online only"), when (settings.lyricsMode) { "offline" -> 1; "online" -> 2; else -> 0 }) { vm.setLyricsMode(listOf("auto", "offline", "online")[it]) } }
+        item { ChoiceRow("Lyrics size", listOf("16", "20", "24", "28"), listOf(16, 20, 24, 28).indexOf(settings.lyricsFontSize).coerceAtLeast(1)) { vm.setLyricsFontSize(listOf(16, 20, 24, 28)[it]) } }
         item { SettingsTitle("Privacy") }
         item { HintCard("No account, tracking, analytics, or network catalog. Listening data stays on this device.") }
         item { SettingsTitle(stringResource(R.string.about)) }
@@ -549,6 +628,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
 
 @Composable private fun SettingsTitle(text: String) = Text(text, Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 6.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
 @Composable private fun SettingsAction(icon: ImageVector, title: String, subtitle: String, action: () -> Unit) = Row(Modifier.fillMaxWidth().clickable(onClick = action).padding(20.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null); Column(Modifier.padding(start = 16.dp)) { Text(title); Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+@Composable private fun ToggleRow(title: String, subtitle: String, checked: Boolean, change: (Boolean) -> Unit) = Row(Modifier.fillMaxWidth().clickable { change(!checked) }.padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title); Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(checked, change) }
 @Composable private fun ChoiceRow(title: String, choices: List<String>, selected: Int, choose: (Int) -> Unit) { Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) { Text(title, fontWeight = FontWeight.SemiBold); LazyRow { items(choices.size) { index -> OutlinedButton({ choose(index) }, Modifier.padding(end = 8.dp)) { Text((if (index == selected) "✓ " else "") + choices[index]) } } } } }
 
 @Composable private fun CustomColorDialog(dismiss: () -> Unit, save: (Int) -> Unit) {

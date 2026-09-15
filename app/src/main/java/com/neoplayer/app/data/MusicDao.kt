@@ -45,6 +45,7 @@ interface MusicDao {
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM category_songs WHERE categoryId = :id") suspend fun nextCategoryPosition(id: Long): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun addCategorySong(value: CategorySongEntity)
     @Query("DELETE FROM category_songs WHERE categoryId = :categoryId AND songId = :songId") suspend fun removeCategorySong(categoryId: Long, songId: Long)
+    @Query("SELECT songs.* FROM songs JOIN category_songs ON songs.id = category_songs.songId WHERE category_songs.categoryId = :id ORDER BY category_songs.position") fun categorySongs(id: Long): Flow<List<SongEntity>>
 
     @Query("SELECT * FROM lyrics WHERE songId = :songId") fun lyrics(songId: Long): Flow<LyricsEntity?>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveLyrics(value: LyricsEntity)
@@ -52,6 +53,14 @@ interface MusicDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveHistory(value: ListeningHistoryEntity)
     @Query("SELECT * FROM listening_history WHERE songId = :songId") suspend fun history(songId: Long): ListeningHistoryEntity?
     @Query("DELETE FROM listening_history") suspend fun clearHistory()
+    @Query("SELECT * FROM listening_history ORDER BY lastPlayedAt DESC") fun histories(): Flow<List<ListeningHistoryEntity>>
+
+    @Query("SELECT path FROM excluded_folders ORDER BY path") fun excludedFolders(): Flow<List<String>>
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun excludeFolder(value: ExcludedFolderEntity)
+    @Query("DELETE FROM excluded_folders WHERE path = :path") suspend fun includeFolder(path: String)
+
+    @Query("UPDATE playlist_songs SET position = :position WHERE playlistId = :playlistId AND songId = :songId") suspend fun setPlaylistPosition(playlistId: Long, songId: Long, position: Int)
+    @Query("UPDATE category_songs SET position = :position WHERE categoryId = :categoryId AND songId = :songId") suspend fun setCategoryPosition(categoryId: Long, songId: Long, position: Int)
 
     @Transaction
     suspend fun replaceLibrary(values: List<SongEntity>) {

@@ -23,7 +23,15 @@ data class AppSettings(
     val reduceMotion: Boolean = false,
     val rememberQueue: Boolean = true,
     val resumeLastSong: Boolean = true,
-    val lyricsMode: String = "auto"
+    val lyricsMode: String = "auto",
+    val minDurationMs: Long = 10_000,
+    val gapless: Boolean = true,
+    val crossfadeSeconds: Int = 0,
+    val defaultSpeed: Float = 1f,
+    val translationEnabled: Boolean = true,
+    val romanizationEnabled: Boolean = true,
+    val lyricsFontSize: Int = 20,
+    val lyricsAutoScroll: Boolean = true
 )
 
 class SettingsRepository(private val context: Context) {
@@ -37,6 +45,14 @@ class SettingsRepository(private val context: Context) {
         val rememberQueue = booleanPreferencesKey("remember_queue")
         val resumeLast = booleanPreferencesKey("resume_last")
         val lyricsMode = stringPreferencesKey("lyrics_mode")
+        val minDuration = androidx.datastore.preferences.core.longPreferencesKey("min_duration")
+        val gapless = booleanPreferencesKey("gapless")
+        val crossfade = intPreferencesKey("crossfade")
+        val defaultSpeed = androidx.datastore.preferences.core.floatPreferencesKey("default_speed")
+        val translation = booleanPreferencesKey("lyrics_translation")
+        val romanization = booleanPreferencesKey("lyrics_romanization")
+        val lyricsFontSize = intPreferencesKey("lyrics_font_size")
+        val lyricsAutoScroll = booleanPreferencesKey("lyrics_auto_scroll")
     }
 
     val values: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -49,7 +65,15 @@ class SettingsRepository(private val context: Context) {
             reduceMotion = p[Keys.reduceMotion] ?: false,
             rememberQueue = p[Keys.rememberQueue] ?: true,
             resumeLastSong = p[Keys.resumeLast] ?: true,
-            lyricsMode = p[Keys.lyricsMode] ?: "auto"
+            lyricsMode = p[Keys.lyricsMode] ?: "auto",
+            minDurationMs = p[Keys.minDuration] ?: 10_000,
+            gapless = p[Keys.gapless] ?: true,
+            crossfadeSeconds = p[Keys.crossfade] ?: 0,
+            defaultSpeed = p[Keys.defaultSpeed] ?: 1f,
+            translationEnabled = p[Keys.translation] ?: true,
+            romanizationEnabled = p[Keys.romanization] ?: true,
+            lyricsFontSize = p[Keys.lyricsFontSize] ?: 20,
+            lyricsAutoScroll = p[Keys.lyricsAutoScroll] ?: true
         )
     }
 
@@ -60,4 +84,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setReduceMotion(value: Boolean) = context.dataStore.edit { it[Keys.reduceMotion] = value }
     suspend fun setRememberQueue(value: Boolean) = context.dataStore.edit { it[Keys.rememberQueue] = value }
     suspend fun setLyricsMode(value: String) = context.dataStore.edit { it[Keys.lyricsMode] = value }
+    suspend fun setMinDuration(value: Long) = context.dataStore.edit { it[Keys.minDuration] = value }
+    suspend fun setGapless(value: Boolean) = context.dataStore.edit { it[Keys.gapless] = value }
+    suspend fun setCrossfade(value: Int) = context.dataStore.edit { it[Keys.crossfade] = value }
+    suspend fun setDefaultSpeed(value: Float) = context.dataStore.edit { it[Keys.defaultSpeed] = value }
+    suspend fun setTranslation(value: Boolean) = context.dataStore.edit { it[Keys.translation] = value }
+    suspend fun setRomanization(value: Boolean) = context.dataStore.edit { it[Keys.romanization] = value }
+    suspend fun setLyricsFontSize(value: Int) = context.dataStore.edit { it[Keys.lyricsFontSize] = value }
+    suspend fun setLyricsAutoScroll(value: Boolean) = context.dataStore.edit { it[Keys.lyricsAutoScroll] = value }
 }

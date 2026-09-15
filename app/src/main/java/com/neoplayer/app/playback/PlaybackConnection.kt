@@ -12,6 +12,11 @@ import com.neoplayer.app.data.SongEntity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 data class PlaybackState(
     val connected: Boolean = false,
@@ -25,6 +30,8 @@ data class PlaybackState(
 )
 
 class PlaybackConnection(private val context: Context) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var sleepTimerGeneration = 0
     private var future: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
     private val _state = MutableStateFlow(PlaybackState())
@@ -68,6 +75,14 @@ class PlaybackConnection(private val context: Context) {
     fun toggleShuffle() { controller?.shuffleModeEnabled = controller?.shuffleModeEnabled != true }
     fun cycleRepeat() { controller?.repeatMode = when (controller?.repeatMode) { Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL; Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF } }
     fun setSpeed(speed: Float) = controller?.setPlaybackSpeed(speed)
+    fun setSleepTimer(minutes: Int) {
+        val generation = ++sleepTimerGeneration
+        scope.launch {
+            delay(minutes * 60_000L)
+            if (generation == sleepTimerGeneration) controller?.pause()
+        }
+    }
+    fun cancelSleepTimer() { sleepTimerGeneration++ }
 
     fun refreshPosition() { controller?.let(::publish) }
     private fun publish(player: Player) {

@@ -8,7 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class MediaStoreScanner(private val context: Context) {
-    suspend fun scan(): List<SongEntity> = withContext(Dispatchers.IO) {
+    suspend fun scan(minDurationMs: Long = 10_000): List<SongEntity> = withContext(Dispatchers.IO) {
         val base = mutableListOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
@@ -35,7 +35,7 @@ class MediaStoreScanner(private val context: Context) {
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             base.toTypedArray(),
             "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= ?",
-            arrayOf("10000"),
+            arrayOf(minDurationMs.toString()),
             "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
         )?.use { cursor ->
             fun text(column: String) = cursor.getColumnIndex(column).takeIf { it >= 0 }?.let(cursor::getString).orEmpty()

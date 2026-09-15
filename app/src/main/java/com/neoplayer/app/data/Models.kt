@@ -87,6 +87,9 @@ data class LyricsEntity(
     val updatedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "excluded_folders")
+data class ExcludedFolderEntity(@PrimaryKey val path: String)
+
 data class AlbumSummary(val album: String, val artist: String, val albumId: Long, val songCount: Int, val durationMs: Long)
 data class ArtistSummary(val artist: String, val songCount: Int, val albumCount: Int)
 data class GenreSummary(val genre: String, val songCount: Int)

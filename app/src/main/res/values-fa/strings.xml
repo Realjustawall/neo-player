@@ -25,5 +25,11 @@
     <string name="lyrics">متن آهنگ</string>
     <string name="queue">صف پخش</string>
     <string name="about">درباره</string>
-    <string name="made_by">Made by یک دیوار</string>
+    <string name="made_by">ساخته‌شده توسط یک دیوار</string>
+    <string name="smart_mixes">میکس‌های هوشمند</string>
+    <string name="never_played">پخش‌نشده‌ها</string>
+    <string name="forgotten_favorites">محبوب‌های فراموش‌شده</string>
+    <string name="sleep_timer">زمان‌سنج خواب</string>
+    <string name="equalizer">اکولایزر</string>
+    <string name="import_lrc">وارد کردن LRC</string>
 </resources>
