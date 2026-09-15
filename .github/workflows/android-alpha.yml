@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-${{ github.ref }}
@@ -52,6 +52,18 @@ jobs:
           path: NEO-PLAYER-Alpha-0.1.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish initial private release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view v0.1.0-alpha >/dev/null 2>&1; then
+            gh release create v0.1.0-alpha NEO-PLAYER-Alpha-0.1.apk \
+              --target "$GITHUB_SHA" \
+              --title "NEO PLAYER Alpha 0.1" \
+              --notes-file CHANGELOG.md
+          fi
 
       - name: Upload lint report
         if: always()
