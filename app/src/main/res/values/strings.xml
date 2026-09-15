@@ -25,11 +25,15 @@
     <string name="lyrics">Lyrics</string>
     <string name="queue">Queue</string>
     <string name="about">About</string>
-    <string name="made_by">Made by A Wall</string>
+    <string name="made_by">Made By a Wall</string>
     <string name="smart_mixes">Smart mixes</string>
     <string name="never_played">Never played</string>
     <string name="forgotten_favorites">Forgotten favorites</string>
     <string name="sleep_timer">Sleep timer</string>
     <string name="equalizer">Equalizer</string>
     <string name="import_lrc">Import LRC</string>
+    <string name="good_morning">Good morning</string>
+    <string name="good_afternoon">Good afternoon</string>
+    <string name="good_evening">Good evening</string>
+    <string name="your_music_stays_yours">Your music stays yours</string>
 </resources>

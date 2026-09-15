@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0-alpha — In development
+
+- preserved 0.1 data with an explicit Room migration
+- added meaningful listening history and local smart mixes
+- completed playlist/category browsing, removal, accessible reordering, artwork and multi-target selection
+- added album, artist and genre detail experiences and collection favorites
+- added safe metadata overrides, Android-confirmed deletion and file sharing
+- added configurable online lyric-provider architecture, LRC import, manual timestamping, translation and romanization layers
+- added sleep timer modes with fade-out and queue/song completion options
+- added hardware-gated equalizer, bass boost, virtualizer and loudness enhancement
+- added folder exclusions, minimum-duration filtering and MediaStore change observation
+- localized the author credit per selected app language
+
 ## 0.1.0-alpha — Alpha 0.1
 
 ### Added

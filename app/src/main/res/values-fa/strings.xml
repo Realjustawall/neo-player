@@ -32,4 +32,8 @@
     <string name="sleep_timer">زمان‌سنج خواب</string>
     <string name="equalizer">اکولایزر</string>
     <string name="import_lrc">وارد کردن LRC</string>
+    <string name="good_morning">صبح بخیر</string>
+    <string name="good_afternoon">بعدازظهر بخیر</string>
+    <string name="good_evening">شب بخیر</string>
+    <string name="your_music_stays_yours">موسیقی شما برای خودتان می‌ماند</string>
 </resources>

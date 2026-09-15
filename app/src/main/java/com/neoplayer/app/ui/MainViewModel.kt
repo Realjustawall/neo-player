@@ -113,6 +113,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setAccent(value: Accent) = viewModelScope.launch { app.settings.setAccent(value) }
     fun setCustomColor(value: Int) = viewModelScope.launch { app.settings.setCustomColor(value) }
     fun setLanguage(value: String) = viewModelScope.launch { app.settings.setLanguage(value) }
+    fun setReduceMotion(value: Boolean) = viewModelScope.launch { app.settings.setReduceMotion(value) }
+    fun setDynamicArtwork(value: Boolean) = viewModelScope.launch { app.settings.setDynamicArtwork(value) }
     fun setMinDuration(value: Long) = viewModelScope.launch { app.settings.setMinDuration(value); repository.rescan(value) }
     fun setGapless(value: Boolean) = viewModelScope.launch { app.settings.setGapless(value) }
     fun setCrossfade(value: Int) = viewModelScope.launch { app.settings.setCrossfade(value) }

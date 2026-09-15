@@ -16,6 +16,8 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -123,6 +125,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -202,6 +206,7 @@ private fun PlayerShell(vm: MainViewModel) {
     var destination by rememberSaveable { mutableStateOf(Destination.HOME) }
     var fullPlayer by rememberSaveable { mutableStateOf(false) }
     val playback by vm.playback.collectAsState()
+    val settings by vm.settings.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(playback.error) { playback.error?.let { snackbar.showSnackbar("Playback error: $it") } }
     Scaffold(
@@ -226,7 +231,7 @@ private fun PlayerShell(vm: MainViewModel) {
             }
         }
     }
-    AnimatedVisibility(fullPlayer, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
+    AnimatedVisibility(fullPlayer, enter = if (settings.reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(), exit = if (settings.reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut()) {
         NowPlayingScreen(vm) { fullPlayer = false }
     }
     BackHandler(fullPlayer) { fullPlayer = false }
@@ -249,9 +254,9 @@ private fun HomeScreen(vm: MainViewModel) {
     val favorites by vm.favoriteIds.collectAsState()
     val histories by vm.histories.collectAsState()
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-    val greeting = when (hour) { in 5..11 -> "Good morning"; in 12..17 -> "Good afternoon"; else -> "Good evening" }
+    val greeting = stringResource(when (hour) { in 5..11 -> R.string.good_morning; in 12..17 -> R.string.good_afternoon; else -> R.string.good_evening })
     LazyColumn(Modifier.fillMaxSize()) {
-        item { ScreenHeader(greeting, "Your music stays yours") }
+        item { ScreenHeader(greeting, stringResource(R.string.your_music_stays_yours)) }
         if (songs.isEmpty()) item { EmptyLibrary(vm) }
         else {
             item { SectionTitle(stringResource(R.string.recently_added)) }
@@ -579,9 +584,12 @@ private fun MiniPlayer(vm: MainViewModel, open: () -> Unit) {
 @Composable
 private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
     val state by vm.playback.collectAsState(); val item = state.current ?: return
+    val settings by vm.settings.collectAsState()
     var panel by remember { mutableStateOf("player") }; var verticalDrag by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(state.playing) { while (state.playing) { delay(500); vm.refreshPosition() } }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(Modifier.fillMaxSize()) {
+        if (settings.dynamicArtwork) AsyncImage(item.mediaMetadata.artworkUri, null, Modifier.fillMaxSize().blur(72.dp).alpha(.18f), contentScale = ContentScale.Crop)
         Column(Modifier.fillMaxSize().padding(WindowInsets.statusBars.asPaddingValues())) {
             Row(Modifier.fillMaxWidth().pointerInput(Unit) { detectVerticalDragGestures(onVerticalDrag = { _, delta -> verticalDrag += delta }, onDragEnd = { if (verticalDrag > 100) close(); verticalDrag = 0f }) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Minimize") }
@@ -594,6 +602,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
                 "lyrics" -> LyricsPanel(vm, item.mediaId.toLongOrNull() ?: -1, state.positionMs)
                 else -> PlayerPanel(vm)
             }
+        }
         }
     }
 }
@@ -712,6 +721,8 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
                 Text(accent.name.lowercase().replaceFirstChar(Char::uppercase), fontSize = 11.sp)
             }
         } } }
+        item { ToggleRow("Dynamic artwork background", "Use the current cover as an immersive player backdrop", settings.dynamicArtwork, vm::setDynamicArtwork) }
+        item { ToggleRow("Reduce animations", "Use immediate transitions for motion sensitivity", settings.reduceMotion, vm::setReduceMotion) }
         item { SettingsTitle("Language") }
         item { ChoiceRow("App language", listOf("System", "English", "فارسی"), when (settings.language) { "en" -> 1; "fa" -> 2; else -> 0 }) { index ->
             val tag = listOf("system", "en", "fa")[index]; vm.setLanguage(tag)
@@ -725,7 +736,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
         item { ToggleRow("Gapless playback", "Media3 gapless transitions for compatible files", settings.gapless, vm::setGapless) }
         item { SettingsTitle("Audio") }
         if (audioEffects.available) {
-            item { ChoiceRow(stringResource(R.string.equalizer), vm.audioPresets, vm.audioPresets.indexOf(audioEffects.preset).coerceAtLeast(0), vm::setAudioPreset) }
+            item { ChoiceRow(stringResource(R.string.equalizer), vm.audioPresets, vm.audioPresets.indexOf(audioEffects.preset).coerceAtLeast(0)) { vm.setAudioPreset(vm.audioPresets[it]) } }
             item { EffectSlider("Bass boost", audioEffects.bass, 1000, vm::setBass) }
             item { EffectSlider("Virtualizer", audioEffects.virtualizer, 1000, vm::setVirtualizer) }
             item { EffectSlider("Loudness", audioEffects.loudnessMb, 1200, vm::setLoudness) }

@@ -42,14 +42,24 @@ jobs:
       - name: Test, lint, and assemble Alpha
         run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
 
+      - name: Select versioned artifact name
+        run: |
+          if [[ "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/tags/v0.1.0-alpha" ]]; then
+            echo "APK_FILE=NEO-PLAYER-Alpha-0.1.apk" >> "$GITHUB_ENV"
+            echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.1" >> "$GITHUB_ENV"
+          else
+            echo "APK_FILE=NEO-PLAYER-Alpha-0.2.apk" >> "$GITHUB_ENV"
+            echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.2" >> "$GITHUB_ENV"
+          fi
+
       - name: Name installable APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk NEO-PLAYER-Alpha-0.1.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk "$APK_FILE"
 
       - name: Upload Alpha APK
         uses: actions/upload-artifact@v4
         with:
-          name: NEO-PLAYER-Alpha-0.1
-          path: NEO-PLAYER-Alpha-0.1.apk
+          name: ${{ env.APK_ARTIFACT }}
+          path: ${{ env.APK_FILE }}
           if-no-files-found: error
           retention-days: 30
 

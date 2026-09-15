@@ -2,7 +2,7 @@
 
 ![NEO PLAYER mark](app/src/main/res/drawable/ic_neo_mark.xml)
 
-**Alpha 0.1** (`0.1.0-alpha`) — a modern local-first music player for Android.
+**Alpha 0.2 development** (`0.2.0-alpha`) — a modern local-first music player for Android. The immutable initial build remains available as the private `v0.1.0-alpha` Release.
 
 NEO PLAYER gives an offline music library an immersive, artwork-led home. There is no account, catalog dependency, tracking, or analytics. Playback and listening data stay on the device.
 
@@ -22,7 +22,7 @@ NEO PLAYER gives an offline music library an immersive, artwork-led home. There 
 - system, dark, light, and AMOLED display modes
 - English and Persian resources with native Android RTL layout behavior
 - Adaptive, round, monochrome launcher icon and branded splash screen
-- Private-by-default operation: no `INTERNET` permission is included in Alpha 0.1
+- Private-by-default operation; internet is contacted only when a user-configured lyrics provider is explicitly requested
 
 ## Architecture
 
@@ -70,7 +70,7 @@ GitHub Actions renames the verified artifact to `NEO-PLAYER-Alpha-0.1.apk`. Alph
 | `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Continue explicit playback in the background |
 | `WAKE_LOCK` | Maintain reliable active audio playback |
 
-The app does not request broad file management or internet access. Device deletion and metadata mutation are intentionally not exposed in this Alpha, avoiding misleading controls and scoped-storage data risks.
+The app does not request broad file management. Deletion uses Android's scoped-storage confirmation sheet. Metadata edits are safe local-library overrides and never rewrite or risk corrupting audio bytes.
 
 ## Lyrics
 
@@ -78,7 +78,7 @@ Lyrics pasted into the editor are saved locally. Standard LRC timestamps such as
 
 ## Current Alpha boundaries
 
-This first installable Alpha concentrates on the reliability path. Hardware equalizer effects, crossfade, ReplayGain, sidecar-file discovery, online lyrics providers, metadata mutation, SAF-based SD-card management, sleep timer, drag reordering, and full favorite album/artist models are intentionally deferred until device compatibility testing. The UI does not advertise these as available.
+Alpha 0.2 adds hardware-gated audio effects, sleep timer, drag-equivalent accessible reordering, collection artwork, favorite albums/artists/playlists, safe metadata overrides, optional configured online lyrics, layered lyrics, LRC import and manual timestamping. Crossfade, ReplayGain, embedded-tag extraction and direct embedded-tag writing remain device/codec-sensitive and are not falsely advertised where they cannot be implemented reliably.
 
 ## Automation and releases
 
@@ -92,4 +92,5 @@ NEO PLAYER has no login, analytics SDK, tracking, cloud sync, or network permiss
 
 Source is licensed under Apache License 2.0. Major libraries: AndroidX, Jetpack Compose, Media3, ExoPlayer, Room, DataStore, and Coil.
 
-**Made by یک دیوار**
+English UI: **Made By a Wall**  
+Persian UI: **ساخته‌شده توسط یک دیوار**

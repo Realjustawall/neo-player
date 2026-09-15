@@ -82,6 +82,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setCustomColor(value: Int) = context.dataStore.edit { it[Keys.customColor] = value; it[Keys.accent] = Accent.CUSTOM.name }
     suspend fun setLanguage(value: String) = context.dataStore.edit { it[Keys.language] = value }
     suspend fun setReduceMotion(value: Boolean) = context.dataStore.edit { it[Keys.reduceMotion] = value }
+    suspend fun setDynamicArtwork(value: Boolean) = context.dataStore.edit { it[Keys.dynamicArtwork] = value }
     suspend fun setRememberQueue(value: Boolean) = context.dataStore.edit { it[Keys.rememberQueue] = value }
     suspend fun setLyricsMode(value: String) = context.dataStore.edit { it[Keys.lyricsMode] = value }
     suspend fun setMinDuration(value: Long) = context.dataStore.edit { it[Keys.minDuration] = value }
