@@ -21,4 +21,16 @@ object LrcParser {
 
     fun activeIndex(lines: List<LyricLine>, positionMs: Long): Int =
         lines.indexOfLast { it.timeMs <= positionMs }.coerceAtLeast(0)
+
+    fun stampLine(input: String, lineIndex: Int, positionMs: Long): String {
+        val lines = input.lines().toMutableList()
+        if (lineIndex !in lines.indices) return input
+        val totalCentiseconds = positionMs.coerceAtLeast(0) / 10
+        val minutes = totalCentiseconds / 6000
+        val seconds = (totalCentiseconds / 100) % 60
+        val fraction = totalCentiseconds % 100
+        val clean = timestamp.replace(lines[lineIndex], "").trim()
+        lines[lineIndex] = "[%02d:%02d.%02d]%s".format(minutes, seconds, fraction, clean)
+        return lines.joinToString("\n")
+    }
 }

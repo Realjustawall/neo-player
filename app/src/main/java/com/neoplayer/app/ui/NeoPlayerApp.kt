@@ -3,12 +3,16 @@
 package com.neoplayer.app.ui
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.audiofx.AudioEffect
+import android.net.Uri
 import android.os.Build
+import android.provider.MediaStore
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.animation.AnimatedVisibility
@@ -93,6 +97,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -192,7 +198,10 @@ private fun PlayerShell(vm: MainViewModel) {
     var destination by rememberSaveable { mutableStateOf(Destination.HOME) }
     var fullPlayer by rememberSaveable { mutableStateOf(false) }
     val playback by vm.playback.collectAsState()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(playback.error) { playback.error?.let { snackbar.showSnackbar("Playback error: $it") } }
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             Column {
                 AnimatedVisibility(playback.current != null) { MiniPlayer(vm) { fullPlayer = true } }
@@ -333,21 +342,39 @@ private fun LibraryScreen(vm: MainViewModel) {
 
 @Composable private fun AlbumList(vm: MainViewModel) {
     val albums by vm.albums.collectAsState(); val songs by vm.songs.collectAsState()
+    var selected by remember { mutableStateOf<Long?>(null) }
+    selected?.let { id -> val tracks = songs.filter { it.albumId == id }; FacetPage(tracks.firstOrNull()?.album.orEmpty(), tracks.firstOrNull()?.artist.orEmpty(), tracks, vm) { selected = null }; return }
     LazyColumn { items(albums, key = { it.albumId }) { album ->
         LibraryFacetRow(Icons.Rounded.Album, album.album, "${album.artist} • ${album.songCount} songs") {
-            songs.firstOrNull { it.albumId == album.albumId }?.let { vm.play(it, songs.filter { song -> song.albumId == album.albumId }) }
+            selected = album.albumId
         }
     } }
 }
 
 @Composable private fun ArtistList(vm: MainViewModel) {
     val artists by vm.artists.collectAsState(); val songs by vm.songs.collectAsState()
-    LazyColumn { items(artists, key = { it.artist }) { artist -> LibraryFacetRow(Icons.Rounded.Person, artist.artist, "${artist.albumCount} albums • ${artist.songCount} songs") { songs.firstOrNull { it.artist == artist.artist }?.let { vm.play(it, songs.filter { s -> s.artist == artist.artist }) } } } }
+    var selected by remember { mutableStateOf<String?>(null) }
+    selected?.let { artist -> FacetPage(artist, "${songs.count { it.artist == artist }} songs", songs.filter { it.artist == artist }, vm) { selected = null }; return }
+    LazyColumn { items(artists, key = { it.artist }) { artist -> LibraryFacetRow(Icons.Rounded.Person, artist.artist, "${artist.albumCount} albums • ${artist.songCount} songs") { selected = artist.artist } } }
 }
 
 @Composable private fun GenreList(vm: MainViewModel) {
     val genres by vm.genres.collectAsState(); val songs by vm.songs.collectAsState()
-    LazyColumn { items(genres, key = { it.genre }) { genre -> LibraryFacetRow(Icons.Rounded.MusicNote, genre.genre, "${genre.songCount} songs") { songs.firstOrNull { it.genre == genre.genre }?.let { vm.play(it, songs.filter { s -> s.genre == genre.genre }) } } } }
+    var selected by remember { mutableStateOf<String?>(null) }
+    selected?.let { genre -> FacetPage(genre, "${songs.count { it.genre == genre }} songs", songs.filter { it.genre == genre }, vm) { selected = null }; return }
+    LazyColumn { items(genres, key = { it.genre }) { genre -> LibraryFacetRow(Icons.Rounded.MusicNote, genre.genre, "${genre.songCount} songs") { selected = genre.genre } } }
+}
+
+@Composable private fun FacetPage(title: String, subtitle: String, tracks: List<SongEntity>, vm: MainViewModel, close: () -> Unit) {
+    val favorites by vm.favoriteIds.collectAsState()
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }; Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.titleLarge); Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button({ tracks.firstOrNull()?.let { vm.play(it, tracks) } }, enabled = tracks.isNotEmpty()) { Icon(Icons.Rounded.PlayArrow, null); Text("Play") }
+            OutlinedButton({ tracks.shuffled().firstOrNull()?.let { vm.play(it, tracks.shuffled()) } }, enabled = tracks.isNotEmpty()) { Icon(Icons.Rounded.Shuffle, null); Text("Shuffle") }
+        }
+        LazyColumn { items(tracks, key = { it.id }) { SongRow(it, favorites.contains(it.id), vm, tracks) } }
+    }
 }
 
 @Composable private fun FolderList(vm: MainViewModel) {
@@ -429,7 +456,9 @@ private fun CollectionEditor(vm: MainViewModel, id: Long, initialTitle: String, 
 
 @Composable
 private fun SongRow(song: SongEntity, favorite: Boolean, vm: MainViewModel, list: List<SongEntity>) {
-    var menu by remember { mutableStateOf(false) }; var info by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }; var info by remember { mutableStateOf(false) }; var confirmDelete by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result -> if (result.resultCode == Activity.RESULT_OK) vm.rescan() }
     val playlists by vm.playlists.collectAsState(); val categories by vm.categories.collectAsState()
     Row(Modifier.fillMaxWidth().clickable { vm.play(song, list) }.padding(start = 16.dp, top = 7.dp, bottom = 7.dp), verticalAlignment = Alignment.CenterVertically) {
         Artwork(song.artworkUri, Modifier.size(54.dp))
@@ -445,10 +474,20 @@ private fun SongRow(song: SongEntity, favorite: Boolean, vm: MainViewModel, list
                 if (playlists.isNotEmpty()) DropdownMenuItem({ Text("Add to ${playlists.first().title}") }, { vm.addToPlaylist(playlists.first().id, song.id); menu = false })
                 if (categories.isNotEmpty()) DropdownMenuItem({ Text("Add to ${categories.first().title}") }, { vm.addToCategory(categories.first().id, song.id); menu = false })
                 DropdownMenuItem({ Text("Song information") }, { info = true; menu = false })
+                DropdownMenuItem({ Text("Share file") }, {
+                    val uri = Uri.parse(song.uri)
+                    val share = Intent(Intent.ACTION_SEND).setType(song.mimeType.ifBlank { "audio/*" }).putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    context.startActivity(Intent.createChooser(share, song.title)); menu = false
+                })
+                if (Build.VERSION.SDK_INT >= 30) DropdownMenuItem({ Text("Delete from device") }, { confirmDelete = true; menu = false })
             }
         }
     }
     if (info) SongInfo(song) { info = false }
+    if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("Delete ${song.title}?") }, text = { Text("This permanently removes the audio file from the device. This cannot be undone.") }, confirmButton = { TextButton({
+        confirmDelete = false
+        if (Build.VERSION.SDK_INT >= 30) runCatching { MediaStore.createDeleteRequest(context.contentResolver, listOf(Uri.parse(song.uri))).intentSender }.getOrNull()?.let { deleteLauncher.launch(IntentSenderRequest.Builder(it).build()) }
+    }) { Text("Delete", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton({ confirmDelete = false }) { Text("Cancel") } })
 }
 
 @Composable private fun SongInfo(song: SongEntity, dismiss: () -> Unit) {
@@ -552,6 +591,8 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
         LazyColumn { itemsIndexed(state.queue, key = { index, item -> "$index-${item.mediaId}" }) { index, item ->
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Artwork(item.mediaMetadata.artworkUri?.toString(), Modifier.size(48.dp)); Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(item.mediaMetadata.title?.toString().orEmpty(), maxLines = 1); Text(item.mediaMetadata.artist?.toString().orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
+                IconButton({ vm.moveQueueItem(index, index - 1) }, enabled = index > 0) { Icon(Icons.Rounded.KeyboardArrowUp, "Move up") }
+                IconButton({ vm.moveQueueItem(index, index + 1) }, enabled = index < state.queue.lastIndex) { Icon(Icons.Rounded.KeyboardArrowDown, "Move down") }
                 IconButton({ vm.removeQueueItem(index) }) { Icon(Icons.Rounded.Close, "Remove") }
             }
         } }
@@ -560,9 +601,15 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
 
 @Composable private fun LyricsPanel(vm: MainViewModel, songId: Long, position: Long) {
     val lyrics by vm.lyrics(songId).collectAsState(initial = null)
+    val settings by vm.settings.collectAsState()
     var editing by remember { mutableStateOf(false) }; var draft by remember(lyrics?.original) { mutableStateOf(lyrics?.original.orEmpty()) }
+    var translation by remember(lyrics?.translation) { mutableStateOf(lyrics?.translation.orEmpty()) }
+    var romanization by remember(lyrics?.romanization) { mutableStateOf(lyrics?.romanization.orEmpty()) }
+    var syncLine by remember { mutableIntStateOf(0) }
     val lines = remember(lyrics?.original) { LrcParser.parse(lyrics?.original.orEmpty()) }
     val context = LocalContext.current
+    val loading by vm.lyricsLoading.collectAsState()
+    val providerError by vm.lyricsError.collectAsState()
     val importLrc = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { selected ->
             runCatching { context.contentResolver.openInputStream(selected)?.bufferedReader()?.use { it.readText() } }
@@ -572,13 +619,18 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) { Text(stringResource(R.string.lyrics), Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium); TextButton({ importLrc.launch("*/*") }) { Text(stringResource(R.string.import_lrc)) }; TextButton({ editing = !editing }) { Text(if (editing) "Preview" else "Edit") } }
         if (editing) {
-            OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth().weight(1f), label = { Text("Paste text or LRC") })
-            Button({ vm.saveLyrics(songId, draft); editing = false }, Modifier.fillMaxWidth().padding(vertical = 12.dp)) { Text("Save lyrics") }
+            OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth().weight(1f), label = { Text("Original lyrics or LRC") })
+            if (settings.romanizationEnabled) OutlinedTextField(romanization, { romanization = it }, Modifier.fillMaxWidth().padding(top = 6.dp), label = { Text("Pronunciation / romanization") }, maxLines = 3)
+            if (settings.translationEnabled) OutlinedTextField(translation, { translation = it }, Modifier.fillMaxWidth().padding(top = 6.dp), label = { Text("Translation") }, maxLines = 3)
+            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton({ draft = LrcParser.stampLine(draft, syncLine, position); syncLine++ }, Modifier.weight(1f), enabled = syncLine < draft.lines().size) { Text("Stamp line ${syncLine + 1}") }
+                Button({ vm.saveLyricsLayers(songId, draft, translation, romanization); editing = false }, Modifier.weight(1f)) { Text("Save lyrics") }
+            }
         } else if (lyrics == null || lyrics?.original.isNullOrBlank()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Rounded.Lyrics, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary); Text("No lyrics found"); TextButton({ editing = true }) { Text("Add lyrics") } } }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Rounded.Lyrics, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary); Text("No lyrics found"); providerError?.let { Text(it, color = MaterialTheme.colorScheme.error) }; if (vm.onlineLyricsAvailable && settings.lyricsMode != "offline") Button({ vm.fetchLyrics(songId) }, enabled = !loading) { if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Fetch lyrics") }; TextButton({ editing = true }) { Text("Add lyrics") } } }
         } else if (lines.isNotEmpty()) {
             val active = LrcParser.activeIndex(lines, position)
-            LazyColumn(Modifier.fillMaxSize()) { itemsIndexed(lines) { index, line -> Text(line.text.ifBlank { "♪" }, Modifier.padding(vertical = 12.dp), fontSize = if (index == active) 24.sp else 19.sp, fontWeight = if (index == active) FontWeight.Bold else FontWeight.Normal, color = if (index == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) } }
+            LazyColumn(Modifier.fillMaxSize()) { itemsIndexed(lines) { index, line -> Column(Modifier.padding(vertical = 10.dp)) { Text(line.text.ifBlank { "♪" }, fontSize = if (index == active) (settings.lyricsFontSize + 4).sp else settings.lyricsFontSize.sp, fontWeight = if (index == active) FontWeight.Bold else FontWeight.Normal, color = if (index == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant); translation.lines().getOrNull(index)?.takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = (settings.lyricsFontSize - 3).coerceAtLeast(12).sp) }; romanization.lines().getOrNull(index)?.takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .75f), fontSize = (settings.lyricsFontSize - 4).coerceAtLeast(11).sp) } } } }
         } else {
             LazyColumn { item { Text(lyrics?.original.orEmpty(), fontSize = 20.sp, lineHeight = 32.sp, modifier = Modifier.padding(vertical = 18.dp)) } }
         }
@@ -615,7 +667,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
         item { ToggleRow("Gapless playback", "Media3 gapless transitions for compatible files", settings.gapless, vm::setGapless) }
         if (equalizerIntent.resolveActivity(context.packageManager) != null) item { SettingsAction(Icons.Rounded.MusicNote, stringResource(R.string.equalizer), "Open the device audio-effects panel", { context.startActivity(equalizerIntent) }) }
         item { SettingsTitle("Lyrics") }
-        item { ChoiceRow("Lyrics source", listOf("Auto", "Offline only", "Online only"), when (settings.lyricsMode) { "offline" -> 1; "online" -> 2; else -> 0 }) { vm.setLyricsMode(listOf("auto", "offline", "online")[it]) } }
+        item { val modes = if (vm.onlineLyricsAvailable) listOf("Auto", "Offline only", "Online only") else listOf("Auto", "Offline only"); ChoiceRow("Lyrics source", modes, if (settings.lyricsMode == "offline") 1 else if (settings.lyricsMode == "online" && vm.onlineLyricsAvailable) 2 else 0) { vm.setLyricsMode(if (it == 1) "offline" else if (it == 2) "online" else "auto") } }
         item { ChoiceRow("Lyrics size", listOf("16", "20", "24", "28"), listOf(16, 20, 24, 28).indexOf(settings.lyricsFontSize).coerceAtLeast(1)) { vm.setLyricsFontSize(listOf(16, 20, 24, 28)[it]) } }
         item { SettingsTitle("Privacy") }
         item { HintCard("No account, tracking, analytics, or network catalog. Listening data stays on this device.") }

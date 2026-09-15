@@ -5,6 +5,10 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val lyricsApiBase = providers.gradleProperty("NEO_LYRICS_API_BASE").orElse("").get()
+val lyricsApiKey = providers.gradleProperty("NEO_LYRICS_API_KEY").orElse("").get()
+fun quotedBuildValue(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.neoplayer.app"
     compileSdk = 35
@@ -18,6 +22,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
         buildConfigField("String", "DISPLAY_VERSION", "\"Alpha 0.2\"")
+        buildConfigField("String", "LYRICS_API_BASE", quotedBuildValue(lyricsApiBase))
+        buildConfigField("String", "LYRICS_API_KEY", quotedBuildValue(lyricsApiKey))
     }
 
     buildTypes {

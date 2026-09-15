@@ -38,12 +38,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val query = MutableStateFlow("")
     val results = query.flatMapLatest(repository::search).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val scanning = MutableStateFlow(false)
+    val lyricsLoading = MutableStateFlow(false)
+    val lyricsError = MutableStateFlow<String?>(null)
+    val onlineLyricsAvailable: Boolean get() = app.lyricsProviders.available
 
     init {
         viewModelScope.launch {
             playback.map { it.current?.mediaId?.toLongOrNull() }.filterNotNull().distinctUntilChanged().collect { id ->
                 delay(30_000)
-                if (playback.value.current?.mediaId?.toLongOrNull() == id && playback.value.playing) repository.recordPlay(id, 30_000)
+                if (playback.value.current?.mediaId?.toLongOrNull() == id && playback.value.playing) {
+                    repository.recordPlay(id, 30_000)
+                    while (playback.value.current?.mediaId?.toLongOrNull() == id) {
+                        delay(30_000)
+                        if (playback.value.playing) repository.addListeningTime(id, 30_000)
+                    }
+                }
             }
         }
     }
@@ -51,7 +60,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun rescan() = viewModelScope.launch { scanning.value = true; runCatching { repository.rescan(settings.value.minDurationMs) }; scanning.value = false }
     fun play(song: com.neoplayer.app.data.SongEntity, list: List<com.neoplayer.app.data.SongEntity> = songs.value) = app.playback.play(song, list)
     fun togglePlayback() = app.playback.toggle()
-    fun next() = app.playback.next()
+    fun next() { playback.value.current?.mediaId?.toLongOrNull()?.let { id -> viewModelScope.launch { repository.recordSkip(id) } }; app.playback.next() }
     fun previous() = app.playback.previous()
     fun seek(position: Long) = app.playback.seekTo(position)
     fun toggleShuffle() = app.playback.toggleShuffle()
@@ -62,6 +71,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addQueue(song: com.neoplayer.app.data.SongEntity) = app.playback.addToQueue(song)
     fun clearQueue() = app.playback.clearQueue()
     fun removeQueueItem(index: Int) = app.playback.removeQueueItem(index)
+    fun moveQueueItem(from: Int, to: Int) = app.playback.moveQueueItem(from, to)
     fun createPlaylist(title: String) = viewModelScope.launch { if (title.isNotBlank()) repository.createPlaylist(title) }
     fun deletePlaylist(id: Long) = viewModelScope.launch { repository.deletePlaylist(id) }
     fun addToPlaylist(playlistId: Long, songId: Long) = viewModelScope.launch { repository.addToPlaylist(playlistId, songId) }
@@ -82,6 +92,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun includeFolder(path: String) = viewModelScope.launch { repository.includeFolder(path); repository.rescan() }
     fun lyrics(id: Long) = repository.lyrics(id)
     fun saveLyrics(id: Long, text: String) = viewModelScope.launch { repository.saveLyrics(LyricsEntity(id, text, synchronized = text.contains(Regex("\\[\\d+:\\d+")))) }
+    fun saveLyricsLayers(id: Long, original: String, translation: String, romanization: String) = viewModelScope.launch {
+        repository.saveLyrics(LyricsEntity(id, original, translation, romanization, synchronized = original.contains(Regex("\\[\\d+:\\d+"))))
+    }
+    fun fetchLyrics(id: Long) = viewModelScope.launch {
+        lyricsLoading.value = true
+        lyricsError.value = if (repository.fetchLyrics(id)) null else "Lyrics provider returned no result"
+        lyricsLoading.value = false
+    }
     fun setTheme(value: ThemeMode) = viewModelScope.launch { app.settings.setTheme(value) }
     fun setAccent(value: Accent) = viewModelScope.launch { app.settings.setAccent(value) }
     fun setCustomColor(value: Int) = viewModelScope.launch { app.settings.setCustomColor(value) }

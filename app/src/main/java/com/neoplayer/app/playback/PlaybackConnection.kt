@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
@@ -26,7 +27,8 @@ data class PlaybackState(
     val durationMs: Long = 0,
     val shuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
-    val queue: List<MediaItem> = emptyList()
+    val queue: List<MediaItem> = emptyList(),
+    val error: String? = null
 )
 
 class PlaybackConnection(private val context: Context) {
@@ -35,10 +37,12 @@ class PlaybackConnection(private val context: Context) {
     private var future: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
     private val _state = MutableStateFlow(PlaybackState())
+    private var lastError: String? = null
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = publish(player)
+        override fun onPlayerError(error: PlaybackException) { lastError = error.errorCodeName; controller?.let(::publish) }
     }
 
     fun connect() {
@@ -94,7 +98,8 @@ class PlaybackConnection(private val context: Context) {
             durationMs = player.duration.coerceAtLeast(0),
             shuffle = player.shuffleModeEnabled,
             repeatMode = player.repeatMode,
-            queue = List(player.mediaItemCount) { player.getMediaItemAt(it) }
+            queue = List(player.mediaItemCount) { player.getMediaItemAt(it) },
+            error = lastError.also { lastError = null }
         )
     }
 }

@@ -2,8 +2,9 @@ package com.neoplayer.app.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import com.neoplayer.app.lyrics.LyricsProviderRegistry
 
-class MusicRepository(private val dao: MusicDao, private val scanner: MediaStoreScanner) {
+class MusicRepository(private val dao: MusicDao, private val scanner: MediaStoreScanner, private val lyricsProviders: LyricsProviderRegistry) {
     val songs = dao.songs()
     val albums = dao.albums()
     val artists = dao.artists()
@@ -40,6 +41,12 @@ class MusicRepository(private val dao: MusicDao, private val scanner: MediaStore
     suspend fun reorderCategory(id: Long, songs: List<Long>) = songs.forEachIndexed { index, songId -> dao.setCategoryPosition(id, songId, index) }
     fun lyrics(songId: Long): Flow<LyricsEntity?> = dao.lyrics(songId)
     suspend fun saveLyrics(value: LyricsEntity) = dao.saveLyrics(value)
+    suspend fun fetchLyrics(songId: Long): Boolean {
+        val song = dao.song(songId) ?: return false
+        val found = lyricsProviders.find(song) ?: return false
+        dao.saveLyrics(LyricsEntity(songId, found.original, found.translation, found.romanization, found.synchronized, found.source))
+        return true
+    }
     suspend fun recordPlay(id: Long, listenedMs: Long) {
         val previous = dao.history(id)
         dao.saveHistory((previous ?: ListeningHistoryEntity(id)).copy(
@@ -47,5 +54,13 @@ class MusicRepository(private val dao: MusicDao, private val scanner: MediaStore
             totalListeningMs = (previous?.totalListeningMs ?: 0) + listenedMs,
             lastPlayedAt = System.currentTimeMillis()
         ))
+    }
+    suspend fun addListeningTime(id: Long, listenedMs: Long) {
+        val previous = dao.history(id) ?: ListeningHistoryEntity(id)
+        dao.saveHistory(previous.copy(totalListeningMs = previous.totalListeningMs + listenedMs, lastPlayedAt = System.currentTimeMillis()))
+    }
+    suspend fun recordSkip(id: Long) {
+        val previous = dao.history(id) ?: ListeningHistoryEntity(id)
+        dao.saveHistory(previous.copy(skipCount = previous.skipCount + 1))
     }
 }

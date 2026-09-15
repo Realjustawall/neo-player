@@ -5,6 +5,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -30,6 +31,13 @@ class NeoPlaybackService : MediaSessionService() {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = persistQueue()
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) = persistQueue()
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) = persistQueue()
+            override fun onPlayerError(error: PlaybackException) {
+                if (player.hasNextMediaItem()) {
+                    player.seekToNextMediaItem()
+                    player.prepare()
+                    player.play()
+                }
+            }
         })
         session = MediaSession.Builder(this, player).build()
     }

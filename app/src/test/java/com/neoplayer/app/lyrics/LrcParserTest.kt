@@ -21,4 +21,8 @@ class LrcParserTest {
         assertEquals(0, LrcParser.activeIndex(lines, 1_500))
         assertEquals(1, LrcParser.activeIndex(lines, 2_500))
     }
+
+    @Test fun stampsAnEditableLine() {
+        assertEquals("First\n[01:02.34]Second", LrcParser.stampLine("First\nSecond", 1, 62_340))
+    }
 }
