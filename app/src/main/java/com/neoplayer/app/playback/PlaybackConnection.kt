@@ -28,7 +28,8 @@ data class PlaybackState(
     val shuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val queue: List<MediaItem> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
+    val ended: Boolean = false
 )
 
 class PlaybackConnection(private val context: Context) {
@@ -82,9 +83,19 @@ class PlaybackConnection(private val context: Context) {
     fun setSleepTimer(minutes: Int) {
         val generation = ++sleepTimerGeneration
         scope.launch {
-            delay(minutes * 60_000L)
-            if (generation == sleepTimerGeneration) controller?.pause()
+            val total = minutes * 60_000L
+            delay((total - 5_000).coerceAtLeast(0))
+            repeat(5) { step -> if (generation == sleepTimerGeneration) controller?.volume = 1f - ((step + 1) / 5f); delay(1_000) }
+            if (generation == sleepTimerGeneration) { controller?.pause(); controller?.volume = 1f }
         }
+    }
+    fun setSleepAtEndOfSong() {
+        val generation = ++sleepTimerGeneration
+        scope.launch { while (generation == sleepTimerGeneration) { delay(500); controller?.let { if (it.duration > 0 && it.duration - it.currentPosition < 700) { it.pause(); return@launch } } } }
+    }
+    fun setSleepAtEndOfQueue() {
+        val generation = ++sleepTimerGeneration
+        scope.launch { while (generation == sleepTimerGeneration) { delay(500); controller?.let { if (it.playbackState == Player.STATE_ENDED && !it.hasNextMediaItem()) { it.pause(); return@launch } } } }
     }
     fun cancelSleepTimer() { sleepTimerGeneration++ }
 
@@ -99,7 +110,8 @@ class PlaybackConnection(private val context: Context) {
             shuffle = player.shuffleModeEnabled,
             repeatMode = player.repeatMode,
             queue = List(player.mediaItemCount) { player.getMediaItemAt(it) },
-            error = lastError.also { lastError = null }
+            error = lastError.also { lastError = null },
+            ended = player.playbackState == Player.STATE_ENDED
         )
     }
 }

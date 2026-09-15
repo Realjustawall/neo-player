@@ -9,6 +9,7 @@ import com.neoplayer.app.data.MediaStoreScanner
 import com.neoplayer.app.data.MusicRepository
 import com.neoplayer.app.data.NeoDatabase
 import com.neoplayer.app.playback.PlaybackConnection
+import com.neoplayer.app.playback.AudioEffectsEngine
 import com.neoplayer.app.settings.SettingsRepository
 import com.neoplayer.app.lyrics.ConfiguredJsonLyricsProvider
 import com.neoplayer.app.lyrics.LyricsProviderRegistry
@@ -32,6 +33,7 @@ class NeoApplication : Application() {
         private set
     lateinit var lyricsProviders: LyricsProviderRegistry
         private set
+    val audioEffects = AudioEffectsEngine()
 
     override fun onCreate() {
         super.onCreate()

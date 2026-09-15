@@ -28,10 +28,15 @@ interface MusicDao {
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE songId = :id)") suspend fun isFavorite(id: Long): Boolean
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun addFavorite(value: FavoriteEntity)
     @Query("DELETE FROM favorites WHERE songId = :id") suspend fun removeFavorite(id: Long)
+    @Query("SELECT type || ':' || `key` FROM favorite_collections") fun favoriteCollectionKeys(): Flow<List<String>>
+    @Query("SELECT EXISTS(SELECT 1 FROM favorite_collections WHERE type = :type AND `key` = :key)") suspend fun isFavoriteCollection(type: String, key: String): Boolean
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun addFavoriteCollection(value: FavoriteCollectionEntity)
+    @Query("DELETE FROM favorite_collections WHERE type = :type AND `key` = :key") suspend fun removeFavoriteCollection(type: String, key: String)
 
     @Query("SELECT * FROM playlists ORDER BY createdAt DESC") fun playlists(): Flow<List<PlaylistEntity>>
     @Insert suspend fun createPlaylist(value: PlaylistEntity): Long
     @Query("UPDATE playlists SET title = :title WHERE id = :id") suspend fun renamePlaylist(id: Long, title: String)
+    @Query("UPDATE playlists SET artworkUri = :uri WHERE id = :id") suspend fun setPlaylistArtwork(id: Long, uri: String?)
     @Query("DELETE FROM playlists WHERE id = :id") suspend fun deletePlaylist(id: Long)
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_songs WHERE playlistId = :id") suspend fun nextPlaylistPosition(id: Long): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun addPlaylistSong(value: PlaylistSongEntity)
@@ -41,6 +46,7 @@ interface MusicDao {
     @Query("SELECT * FROM categories ORDER BY createdAt DESC") fun categories(): Flow<List<CategoryEntity>>
     @Insert suspend fun createCategory(value: CategoryEntity): Long
     @Query("UPDATE categories SET title = :title, description = :description WHERE id = :id") suspend fun updateCategory(id: Long, title: String, description: String)
+    @Query("UPDATE categories SET artworkUri = :uri WHERE id = :id") suspend fun setCategoryArtwork(id: Long, uri: String?)
     @Query("DELETE FROM categories WHERE id = :id") suspend fun deleteCategory(id: Long)
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM category_songs WHERE categoryId = :id") suspend fun nextCategoryPosition(id: Long): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun addCategorySong(value: CategorySongEntity)
@@ -58,6 +64,10 @@ interface MusicDao {
     @Query("SELECT path FROM excluded_folders ORDER BY path") fun excludedFolders(): Flow<List<String>>
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun excludeFolder(value: ExcludedFolderEntity)
     @Query("DELETE FROM excluded_folders WHERE path = :path") suspend fun includeFolder(path: String)
+
+    @Query("SELECT * FROM metadata_overrides") suspend fun metadataOverrides(): List<MetadataOverrideEntity>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveMetadataOverride(value: MetadataOverrideEntity)
+    @Query("DELETE FROM metadata_overrides WHERE songId = :songId") suspend fun clearMetadataOverride(songId: Long)
 
     @Query("UPDATE playlist_songs SET position = :position WHERE playlistId = :playlistId AND songId = :songId") suspend fun setPlaylistPosition(playlistId: Long, songId: Long, position: Int)
     @Query("UPDATE category_songs SET position = :position WHERE categoryId = :categoryId AND songId = :songId") suspend fun setCategoryPosition(categoryId: Long, songId: Long, position: Int)

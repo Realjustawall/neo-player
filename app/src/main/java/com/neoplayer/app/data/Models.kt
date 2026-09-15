@@ -90,6 +90,19 @@ data class LyricsEntity(
 @Entity(tableName = "excluded_folders")
 data class ExcludedFolderEntity(@PrimaryKey val path: String)
 
+@Entity(tableName = "metadata_overrides")
+data class MetadataOverrideEntity(
+    @PrimaryKey val songId: Long,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val genre: String,
+    val year: Int
+)
+
+@Entity(tableName = "favorite_collections", primaryKeys = ["type", "key"])
+data class FavoriteCollectionEntity(val type: String, val key: String, val addedAt: Long = System.currentTimeMillis())
+
 data class AlbumSummary(val album: String, val artist: String, val albumId: Long, val songCount: Int, val durationMs: Long)
 data class ArtistSummary(val artist: String, val songCount: Int, val albumCount: Int)
 data class GenreSummary(val genre: String, val songCount: Int)

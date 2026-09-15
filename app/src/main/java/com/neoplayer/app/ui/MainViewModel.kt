@@ -29,12 +29,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val genres = repository.genres.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val folders = repository.folders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val favoriteIds = repository.favorites.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val favoriteCollections = repository.favoriteCollections.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val playlists = repository.playlists.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val categories = repository.categories.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val histories = repository.histories.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val excludedFolders = repository.excludedFolders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val settings = app.settings.values.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
     val playback = app.playback.state
+    val audioEffects = app.audioEffects.state
+    val audioPresets get() = app.audioEffects.presets
     val query = MutableStateFlow("")
     val results = query.flatMapLatest(repository::search).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val scanning = MutableStateFlow(false)
@@ -67,6 +70,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun cycleRepeat() = app.playback.cycleRepeat()
     fun refreshPosition() = app.playback.refreshPosition()
     fun toggleFavorite(id: Long) = viewModelScope.launch { repository.toggleFavorite(id) }
+    fun toggleFavoriteCollection(type: String, key: String) = viewModelScope.launch { repository.toggleFavoriteCollection(type, key) }
     fun addNext(song: com.neoplayer.app.data.SongEntity) = app.playback.addNext(song)
     fun addQueue(song: com.neoplayer.app.data.SongEntity) = app.playback.addToQueue(song)
     fun clearQueue() = app.playback.clearQueue()
@@ -75,14 +79,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun createPlaylist(title: String) = viewModelScope.launch { if (title.isNotBlank()) repository.createPlaylist(title) }
     fun deletePlaylist(id: Long) = viewModelScope.launch { repository.deletePlaylist(id) }
     fun addToPlaylist(playlistId: Long, songId: Long) = viewModelScope.launch { repository.addToPlaylist(playlistId, songId) }
+    fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>) = viewModelScope.launch { songIds.forEach { repository.addToPlaylist(playlistId, it) } }
     fun createCategory(title: String, description: String = "") = viewModelScope.launch { if (title.isNotBlank()) repository.createCategory(title, description) }
     fun deleteCategory(id: Long) = viewModelScope.launch { repository.deleteCategory(id) }
     fun addToCategory(categoryId: Long, songId: Long) = viewModelScope.launch { repository.addToCategory(categoryId, songId) }
     fun setSpeed(speed: Float) = app.playback.setSpeed(speed)
     fun setSleepTimer(minutes: Int) = app.playback.setSleepTimer(minutes)
     fun cancelSleepTimer() = app.playback.cancelSleepTimer()
+    fun sleepAtEndOfSong() = app.playback.setSleepAtEndOfSong()
+    fun sleepAtEndOfQueue() = app.playback.setSleepAtEndOfQueue()
     fun renamePlaylist(id: Long, title: String) = viewModelScope.launch { if (title.isNotBlank()) repository.renamePlaylist(id, title) }
     fun updateCategory(id: Long, title: String, description: String) = viewModelScope.launch { if (title.isNotBlank()) repository.updateCategory(id, title, description) }
+    fun setCollectionArtwork(id: Long, uri: String?, playlist: Boolean) = viewModelScope.launch { if (playlist) repository.setPlaylistArtwork(id, uri) else repository.setCategoryArtwork(id, uri) }
     fun playlistSongs(id: Long) = repository.playlistSongs(id)
     fun categorySongs(id: Long) = repository.categorySongs(id)
     fun removeFromPlaylist(id: Long, songId: Long) = viewModelScope.launch { repository.removeFromPlaylist(id, songId) }
@@ -90,6 +98,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun reorderCollection(id: Long, songIds: List<Long>, playlist: Boolean) = viewModelScope.launch { if (playlist) repository.reorderPlaylist(id, songIds) else repository.reorderCategory(id, songIds) }
     fun excludeFolder(path: String) = viewModelScope.launch { repository.excludeFolder(path); repository.rescan() }
     fun includeFolder(path: String) = viewModelScope.launch { repository.includeFolder(path); repository.rescan() }
+    fun saveMetadata(song: com.neoplayer.app.data.SongEntity, title: String, artist: String, album: String, genre: String, year: Int) = viewModelScope.launch { repository.saveMetadata(song, title, artist, album, genre, year) }
     fun lyrics(id: Long) = repository.lyrics(id)
     fun saveLyrics(id: Long, text: String) = viewModelScope.launch { repository.saveLyrics(LyricsEntity(id, text, synchronized = text.contains(Regex("\\[\\d+:\\d+")))) }
     fun saveLyricsLayers(id: Long, original: String, translation: String, romanization: String) = viewModelScope.launch {
@@ -109,4 +118,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setCrossfade(value: Int) = viewModelScope.launch { app.settings.setCrossfade(value) }
     fun setLyricsMode(value: String) = viewModelScope.launch { app.settings.setLyricsMode(value) }
     fun setLyricsFontSize(value: Int) = viewModelScope.launch { app.settings.setLyricsFontSize(value) }
+    fun setAudioPreset(value: String) = app.audioEffects.applyPreset(value)
+    fun setBass(value: Int) = app.audioEffects.setBass(value)
+    fun setVirtualizer(value: Int) = app.audioEffects.setVirtualizer(value)
+    fun setLoudness(value: Int) = app.audioEffects.setLoudness(value)
+    fun setEqualizerBand(index: Int, value: Short) = app.audioEffects.setBand(index, value)
 }

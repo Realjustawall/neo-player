@@ -6,6 +6,8 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.AudioListener
+import com.neoplayer.app.NeoApplication
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -26,6 +28,9 @@ class NeoPlaybackService : MediaSessionService() {
             )
             .setHandleAudioBecomingNoisy(true)
             .build()
+        player.addAudioListener(object : AudioListener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) { (application as NeoApplication).audioEffects.attach(audioSessionId) }
+        })
         restoreQueue()
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = persistQueue()
@@ -91,6 +96,7 @@ class NeoPlaybackService : MediaSessionService() {
         persistQueue()
         session.release()
         player.release()
+        (application as NeoApplication).audioEffects.release()
         super.onDestroy()
     }
 }
