@@ -50,7 +50,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.animateScrollToItem
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -141,8 +140,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.consume
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
@@ -623,7 +622,6 @@ private fun SongRow(song: SongEntity, favorite: Boolean, vm: MainViewModel, list
     } }, confirmButton = { TextButton(dismiss) { Text(stringResource(R.string.done)) } })
 }
 
-@Composable
 private suspend fun embeddedArtwork(context: android.content.Context, sourceUri: String?): String? = withContext(Dispatchers.IO) {
     if (sourceUri.isNullOrBlank()) return@withContext null
     val file = File(context.cacheDir, "art_" + sourceUri.hashCode() + ".jpg")
@@ -759,7 +757,6 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
                     onDragCancel = { dragDistance = 0f },
                     onDragEnd = { dragDistance = 0f }
                 ) { change, amount ->
-                    change.consume()
                     dragDistance += amount.y
                     if (dragDistance > 56f && currentIndex < state.queue.lastIndex) {
                         vm.moveQueueItem(currentIndex, currentIndex + 1); currentIndex += 1; dragDistance = 0f
