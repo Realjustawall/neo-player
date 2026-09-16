@@ -61,6 +61,7 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Info
@@ -612,6 +613,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
     val favorites by vm.favoriteIds.collectAsState(); val id = item.mediaId.toLongOrNull()
     var speedMenu by remember { mutableStateOf(false) }
     var sleepMenu by remember { mutableStateOf(false) }
+    var customSleep by remember { mutableStateOf(false) }
     var horizontalDrag by remember { mutableFloatStateOf(0f) }
     Column(Modifier.fillMaxSize().padding(horizontal = 26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.weight(.15f))
@@ -641,12 +643,17 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
             TextButton({ sleepMenu = true }) { Text(stringResource(R.string.sleep_timer)) }
             DropdownMenu(sleepMenu, { sleepMenu = false }) {
                 listOf(5, 10, 15, 30, 45, 60).forEach { minutes -> DropdownMenuItem({ Text("$minutes min") }, { vm.setSleepTimer(minutes); sleepMenu = false }) }
+                DropdownMenuItem({ Text("Custom") }, { customSleep = true; sleepMenu = false })
                 DropdownMenuItem({ Text("End of song") }, { vm.sleepAtEndOfSong(); sleepMenu = false })
                 DropdownMenuItem({ Text("End of queue") }, { vm.sleepAtEndOfQueue(); sleepMenu = false })
                 DropdownMenuItem({ Text("Cancel timer") }, { vm.cancelSleepTimer(); sleepMenu = false })
             }
         }
         Spacer(Modifier.weight(.15f))
+    }
+    if (customSleep) {
+        var minutes by remember { mutableStateOf("90") }
+        AlertDialog(onDismissRequest = { customSleep = false }, title = { Text(stringResource(R.string.sleep_timer)) }, text = { OutlinedTextField(minutes, { minutes = it.filter(Char::isDigit).take(3) }, label = { Text("Minutes") }) }, confirmButton = { TextButton({ minutes.toIntOrNull()?.takeIf { it > 0 }?.let(vm::setSleepTimer); customSleep = false }) { Text("Start") } }, dismissButton = { TextButton({ customSleep = false }) { Text("Cancel") } })
     }
 }
 
@@ -704,7 +711,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
 }
 
 @Composable private fun SettingsScreen(vm: MainViewModel) {
-    val settings by vm.settings.collectAsState(); var customDialog by remember { mutableStateOf(false) }
+    val settings by vm.settings.collectAsState(); var customDialog by remember { mutableStateOf(false) }; var clearHistory by remember { mutableStateOf(false) }
     val excluded by vm.excludedFolders.collectAsState()
     val audioEffects by vm.audioEffects.collectAsState()
     val context = LocalContext.current
@@ -733,7 +740,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
         item { ChoiceRow("Minimum audio duration", listOf("0s", "10s", "30s", "60s"), listOf(0L, 10_000L, 30_000L, 60_000L).indexOf(settings.minDurationMs).coerceAtLeast(0)) { vm.setMinDuration(listOf(0L, 10_000L, 30_000L, 60_000L)[it]) } }
         if (excluded.isNotEmpty()) item { Column { Text("Excluded folders", Modifier.padding(horizontal = 20.dp)); excluded.forEach { path -> Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Text(path, Modifier.weight(1f)); TextButton({ vm.includeFolder(path) }) { Text("Include") } } } } }
         item { SettingsTitle("Playback") }
-        item { ToggleRow("Gapless playback", "Media3 gapless transitions for compatible files", settings.gapless, vm::setGapless) }
+        item { HintCard("Gapless transitions are applied automatically by Media3 when compatible encoder metadata is present.") }
         item { SettingsTitle("Audio") }
         if (audioEffects.available) {
             item { ChoiceRow(stringResource(R.string.equalizer), vm.audioPresets, vm.audioPresets.indexOf(audioEffects.preset).coerceAtLeast(0)) { vm.setAudioPreset(vm.audioPresets[it]) } }
@@ -747,11 +754,13 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
         item { ChoiceRow("Lyrics size", listOf("16", "20", "24", "28"), listOf(16, 20, 24, 28).indexOf(settings.lyricsFontSize).coerceAtLeast(1)) { vm.setLyricsFontSize(listOf(16, 20, 24, 28)[it]) } }
         item { SettingsTitle("Privacy") }
         item { HintCard("No account, tracking, analytics, or network catalog. Listening data stays on this device.") }
+        item { SettingsAction(Icons.Rounded.History, "Clear listening history", "Remove play counts, skips and listening time", { clearHistory = true }) }
         item { SettingsTitle(stringResource(R.string.about)) }
         item { Column(Modifier.padding(20.dp)) { Text("NEO PLAYER", style = MaterialTheme.typography.titleLarge); Text(BuildConfig.DISPLAY_VERSION + " • " + BuildConfig.VERSION_NAME); Spacer(Modifier.height(8.dp)); Text("A modern local-first music player."); Text(stringResource(R.string.made_by), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp)); Text("Build ${BuildConfig.VERSION_CODE}\nLicense: Apache-2.0\nLibraries: Jetpack Compose, Media3, Room, DataStore, Coil") } }
         item { Spacer(Modifier.height(20.dp)) }
     }
     if (customDialog) CustomColorDialog({ customDialog = false }) { vm.setCustomColor(it); customDialog = false }
+    if (clearHistory) AlertDialog(onDismissRequest = { clearHistory = false }, title = { Text("Clear listening history?") }, text = { Text("Smart mixes and play counts will be reset. Your music and playlists are not removed.") }, confirmButton = { TextButton({ vm.clearHistory(); clearHistory = false }) { Text("Clear") } }, dismissButton = { TextButton({ clearHistory = false }) { Text("Cancel") } })
 }
 
 @Composable private fun SettingsTitle(text: String) = Text(text, Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 6.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)

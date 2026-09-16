@@ -73,4 +73,5 @@ class MusicRepository(private val dao: MusicDao, private val scanner: MediaStore
         val previous = dao.history(id) ?: ListeningHistoryEntity(id)
         dao.saveHistory(previous.copy(skipCount = previous.skipCount + 1))
     }
+    suspend fun clearHistory() = dao.clearHistory()
 }

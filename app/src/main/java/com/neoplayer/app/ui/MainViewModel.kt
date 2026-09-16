@@ -116,8 +116,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setReduceMotion(value: Boolean) = viewModelScope.launch { app.settings.setReduceMotion(value) }
     fun setDynamicArtwork(value: Boolean) = viewModelScope.launch { app.settings.setDynamicArtwork(value) }
     fun setMinDuration(value: Long) = viewModelScope.launch { app.settings.setMinDuration(value); repository.rescan(value) }
-    fun setGapless(value: Boolean) = viewModelScope.launch { app.settings.setGapless(value) }
-    fun setCrossfade(value: Int) = viewModelScope.launch { app.settings.setCrossfade(value) }
     fun setLyricsMode(value: String) = viewModelScope.launch { app.settings.setLyricsMode(value) }
     fun setLyricsFontSize(value: Int) = viewModelScope.launch { app.settings.setLyricsFontSize(value) }
     fun setAudioPreset(value: String) = app.audioEffects.applyPreset(value)
@@ -125,4 +123,5 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setVirtualizer(value: Int) = app.audioEffects.setVirtualizer(value)
     fun setLoudness(value: Int) = app.audioEffects.setLoudness(value)
     fun setEqualizerBand(index: Int, value: Short) = app.audioEffects.setBand(index, value)
+    fun clearHistory() = viewModelScope.launch { repository.clearHistory() }
 }
