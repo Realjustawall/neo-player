@@ -9,9 +9,6 @@ on:
 permissions:
   contents: write
 
-env:
-  TARGET_BRANCH: main
-
 jobs:
   replace:
     if: ${{ github.actor != 'github-actions[bot]' }}
@@ -20,18 +17,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Reconstruct source archive
+      - name: Reconstruct and verify source archive
         run: |
           cat .replace/chunk_* > /tmp/neo-source.b64
-          base64 --decode /tmp/neo-source.b64 > /tmp/neo-source.zip
-          test "$(sha256sum /tmp/neo-source.zip | awk '{print $1}')" = "a51fe0ae95b2b8608a1c36eadb46d144367ceee6a10d325ff8cb16db87583c51"
+          base64 --decode /tmp/neo-source.b64 > /tmp/neo-source.tar.xz
+          test "$(sha256sum /tmp/neo-source.tar.xz | awk '{print $1}')" = "dd1de197c2e454c8e857bca1ab1e3d35742fbd7b901bf6c0a93eb4f9553728fa"
       - name: Force working tree to NEO PLAYER 0.8 source
         run: |
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          unzip -q /tmp/neo-source.zip -d .
-          rm -rf upload
-          rm -f app/src/main/res/drawable/neo_logo.png
-          cp app/src/main/res/drawable/ic_neo_mark.xml app/src/main/res/drawable/neo_logo.xml
+          tar -xJf /tmp/neo-source.tar.xz -C .
           git add -A
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
