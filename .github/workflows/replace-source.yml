@@ -1,0 +1,39 @@
+name: Force replace source
+
+on:
+  push:
+    branches: [main]
+    paths: ['.replace/**', '.github/workflows/replace-source.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  TARGET_BRANCH: main
+
+jobs:
+  replace:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconstruct source archive
+        run: |
+          cat .replace/chunk_* > /tmp/neo-source.b64
+          base64 --decode /tmp/neo-source.b64 > /tmp/neo-source.zip
+          test "$(sha256sum /tmp/neo-source.zip | awk '{print $1}')" = "a51fe0ae95b2b8608a1c36eadb46d144367ceee6a10d325ff8cb16db87583c51"
+      - name: Force working tree to NEO PLAYER 0.8 source
+        run: |
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          unzip -q /tmp/neo-source.zip -d .
+          rm -rf upload
+          rm -f app/src/main/res/drawable/neo_logo.png
+          cp app/src/main/res/drawable/ic_neo_mark.xml app/src/main/res/drawable/neo_logo.xml
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Replace repository with NEO PLAYER 0.8 Ultimate Release" || true
+          git push origin HEAD:main --force
