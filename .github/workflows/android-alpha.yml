@@ -44,12 +44,14 @@ jobs:
 
       - name: Select versioned artifact name
         run: |
-          if [[ "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/tags/v0.1.0-alpha" ]]; then
+          if [[ "$GITHUB_REF" == "refs/tags/v0.1.0-alpha" ]]; then
             echo "APK_FILE=NEO-PLAYER-Alpha-0.1.apk" >> "$GITHUB_ENV"
             echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.1" >> "$GITHUB_ENV"
+            echo "RELEASE_TITLE=NEO PLAYER Alpha 0.1" >> "$GITHUB_ENV"
           else
             echo "APK_FILE=NEO-PLAYER-Alpha-0.2.apk" >> "$GITHUB_ENV"
             echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.2" >> "$GITHUB_ENV"
+            echo "RELEASE_TITLE=NEO PLAYER Alpha 0.2" >> "$GITHUB_ENV"
           fi
 
       - name: Name installable APK
@@ -63,15 +65,16 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish initial private release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Publish tagged private release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! gh release view v0.1.0-alpha >/dev/null 2>&1; then
-            gh release create v0.1.0-alpha NEO-PLAYER-Alpha-0.1.apk \
+          TAG="${GITHUB_REF#refs/tags/}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" "$APK_FILE" \
               --target "$GITHUB_SHA" \
-              --title "NEO PLAYER Alpha 0.1" \
+              --title "$RELEASE_TITLE" \
               --notes-file CHANGELOG.md
           fi
 

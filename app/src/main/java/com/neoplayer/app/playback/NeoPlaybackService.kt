@@ -1,6 +1,7 @@
 package com.neoplayer.app.playback
 
 import android.content.Intent
+import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -14,7 +15,7 @@ import androidx.media3.session.MediaSessionService
 import org.json.JSONArray
 import org.json.JSONObject
 
-@OptIn(UnstableApi::class)
+@OptIn(markerClass = [UnstableApi::class])
 class NeoPlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
     private lateinit var session: MediaSession
