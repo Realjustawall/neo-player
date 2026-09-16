@@ -3,7 +3,7 @@ name: Force replace source
 on:
   push:
     branches: [main]
-    paths: ['.replace/**', '.github/workflows/replace-source.yml']
+    paths: ['.github/workflows/replace-source.yml']
   workflow_dispatch:
 
 permissions:
@@ -11,23 +11,46 @@ permissions:
 
 jobs:
   replace:
-    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Reconstruct and verify source archive
+      - name: Reconstruct verified NEO PLAYER 0.8 source
         run: |
-          cat .replace/chunk_* > /tmp/neo-source.b64
+          git fetch origin replace-staging-0.8-final7
+          {
+            git show origin/replace-staging-0.8-final7:.replace/chunk_00
+            git show origin/replace-staging-0.8-final7:.replace/chunk_01
+            git show origin/replace-staging-0.8-final7:.replace/chunk_02
+            git show origin/replace-staging-0.8-final7:.replace/chunk_03
+            git show origin/replace-staging-0.8-final7:.replace/chunk_04
+            git show origin/replace-staging-0.8-final7:.replace/chunk_05
+            git show origin/replace-staging-0.8-final7:.replace/chunk_06
+            git show origin/replace-staging-0.8-final7:.replace/chunk_07
+            git show origin/replace-staging-0.8-final7:.replace/fixed_08
+            git show origin/replace-staging-0.8-final7:.replace/fixed_09a
+            git show origin/replace-staging-0.8-final7:.replace/fixed_09b
+            git show origin/replace-staging-0.8-final7:.replace/fixed_10
+            git show origin/replace-staging-0.8-final7:.replace/fixed_11
+            git show origin/replace-staging-0.8-final7:.replace/fixed_12
+            git show origin/replace-staging-0.8-final7:.replace/fixed_13a
+            git show origin/replace-staging-0.8-final7:.replace/fixed_13b
+            git show origin/replace-staging-0.8-final7:.replace/fixed_14
+          } > /tmp/neo-source.b64
           base64 --decode /tmp/neo-source.b64 > /tmp/neo-source.tar.xz
-          test "$(sha256sum /tmp/neo-source.tar.xz | awk '{print $1}')" = "dd1de197c2e454c8e857bca1ab1e3d35742fbd7b901bf6c0a93eb4f9553728fa"
-      - name: Force working tree to NEO PLAYER 0.8 source
+          xz -t /tmp/neo-source.tar.xz
+          rm -rf /tmp/neo-source && mkdir -p /tmp/neo-source
+          tar -xJf /tmp/neo-source.tar.xz -C /tmp/neo-source
+          grep -q 'versionName = "0.8.0"' /tmp/neo-source/app/build.gradle.kts
+          test ! -e /tmp/neo-source/keystore.properties
+          ! find /tmp/neo-source -type f \( -name '*.jks' -o -name '*.keystore' \) | grep -q .
+      - name: Replace main tree exactly
         run: |
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          tar -xJf /tmp/neo-source.tar.xz -C .
+          cp -a /tmp/neo-source/. .
           git add -A
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Replace repository with NEO PLAYER 0.8 Ultimate Release" || true
+          git commit -m "Replace repository with NEO PLAYER 0.8 Ultimate Release"
           git push origin HEAD:main --force
