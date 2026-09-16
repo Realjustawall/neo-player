@@ -15,15 +15,19 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import androidx.paging.cachedIn
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as NeoApplication
     private val repository = app.repository
     val songs = repository.songs.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val songsPaged = repository.songsPaged.cachedIn(viewModelScope)
     val albums = repository.albums.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val artists = repository.artists.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val genres = repository.genres.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -39,13 +43,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val audioEffects = app.audioEffects.state
     val audioPresets get() = app.audioEffects.presets
     val query = MutableStateFlow("")
-    val results = query.flatMapLatest(repository::search).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val results = query.debounce(220).map(String::trim).distinctUntilChanged().flatMapLatest(repository::search)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val scanning = MutableStateFlow(false)
     val lyricsLoading = MutableStateFlow(false)
     val lyricsError = MutableStateFlow<String?>(null)
     val onlineLyricsAvailable: Boolean get() = app.lyricsProviders.available
 
     init {
+        viewModelScope.launch {
+            settings.map { it.crossfadeMs }.distinctUntilChanged().collect { app.playback.setCrossfadeDuration(it) }
+        }
+        viewModelScope.launch {
+            playback.map { it.current?.mediaId?.toLongOrNull() }.filterNotNull().distinctUntilChanged().collect { id ->
+                delay(350)
+                repository.trackEffects(id)?.let(app.audioEffects::applyProfile) ?: app.audioEffects.resetForTrack()
+            }
+        }
         viewModelScope.launch {
             playback.map { it.current?.mediaId?.toLongOrNull() }.filterNotNull().distinctUntilChanged().collect { id ->
                 delay(30_000)
@@ -62,6 +76,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun rescan() = viewModelScope.launch { scanning.value = true; runCatching { repository.rescan(settings.value.minDurationMs) }; scanning.value = false }
     fun play(song: com.neoplayer.app.data.SongEntity, list: List<com.neoplayer.app.data.SongEntity> = songs.value) = app.playback.play(song, list)
+    fun startRadio(seed: com.neoplayer.app.data.SongEntity) {
+        val related = songs.value.filter { it.id == seed.id || it.artist.equals(seed.artist, true) || (seed.genre.isNotBlank() && it.genre.equals(seed.genre, true)) }
+            .distinctBy { it.id }.shuffled()
+        app.playback.play(seed, related.ifEmpty { listOf(seed) })
+    }
+    fun playPlaylist(id: Long) = viewModelScope.launch { repository.playlistSongs(id).first().firstOrNull()?.let { first -> app.playback.play(first, repository.playlistSongs(id).first()) } }
+    fun playCategory(id: Long) = viewModelScope.launch { repository.categorySongs(id).first().firstOrNull()?.let { first -> app.playback.play(first, repository.categorySongs(id).first()) } }
     fun togglePlayback() = app.playback.toggle()
     fun next() { playback.value.current?.mediaId?.toLongOrNull()?.let { id -> viewModelScope.launch { repository.recordSkip(id) } }; app.playback.next() }
     fun previous() = app.playback.previous()
@@ -84,6 +105,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteCategory(id: Long) = viewModelScope.launch { repository.deleteCategory(id) }
     fun addToCategory(categoryId: Long, songId: Long) = viewModelScope.launch { repository.addToCategory(categoryId, songId) }
     fun setSpeed(speed: Float) = app.playback.setSpeed(speed)
+    fun setCrossfadeMs(value: Long) = viewModelScope.launch { app.settings.setCrossfadeMs(value) }
     fun setSleepTimer(minutes: Int) = app.playback.setSleepTimer(minutes)
     fun cancelSleepTimer() = app.playback.cancelSleepTimer()
     fun sleepAtEndOfSong() = app.playback.setSleepAtEndOfSong()
@@ -100,6 +122,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun includeFolder(path: String) = viewModelScope.launch { repository.includeFolder(path); repository.rescan() }
     fun saveMetadata(song: com.neoplayer.app.data.SongEntity, title: String, artist: String, album: String, genre: String, year: Int) = viewModelScope.launch { repository.saveMetadata(song, title, artist, album, genre, year) }
     fun lyrics(id: Long) = repository.lyrics(id)
+    fun loadSidecarLyrics(id: Long) = viewModelScope.launch { repository.loadSidecarLyrics(id) }
     fun saveLyrics(id: Long, text: String) = viewModelScope.launch { repository.saveLyrics(LyricsEntity(id, text, synchronized = text.contains(Regex("\\[\\d+:\\d+")))) }
     fun saveLyricsLayers(id: Long, original: String, translation: String, romanization: String) = viewModelScope.launch {
         repository.saveLyrics(LyricsEntity(id, original, translation, romanization, synchronized = original.contains(Regex("\\[\\d+:\\d+"))))
@@ -118,10 +141,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setMinDuration(value: Long) = viewModelScope.launch { app.settings.setMinDuration(value); repository.rescan(value) }
     fun setLyricsMode(value: String) = viewModelScope.launch { app.settings.setLyricsMode(value) }
     fun setLyricsFontSize(value: Int) = viewModelScope.launch { app.settings.setLyricsFontSize(value) }
-    fun setAudioPreset(value: String) = app.audioEffects.applyPreset(value)
-    fun setBass(value: Int) = app.audioEffects.setBass(value)
-    fun setVirtualizer(value: Int) = app.audioEffects.setVirtualizer(value)
-    fun setLoudness(value: Int) = app.audioEffects.setLoudness(value)
-    fun setEqualizerBand(index: Int, value: Short) = app.audioEffects.setBand(index, value)
+    private fun persistTrackEffects() {
+        playback.value.current?.mediaId?.toLongOrNull()?.let { id ->
+            viewModelScope.launch { delay(80); repository.saveTrackEffects(app.audioEffects.snapshot(id)) }
+        }
+    }
+    fun setAudioPreset(value: String) { app.audioEffects.applyPreset(value); persistTrackEffects() }
+    fun setBass(value: Int) { app.audioEffects.setBass(value); persistTrackEffects() }
+    fun setVirtualizer(value: Int) { app.audioEffects.setVirtualizer(value); persistTrackEffects() }
+    fun setLoudness(value: Int) { app.audioEffects.setLoudness(value); persistTrackEffects() }
+    fun setEqualizerBand(index: Int, value: Short) { app.audioEffects.setBand(index, value); persistTrackEffects() }
     fun clearHistory() = viewModelScope.launch { repository.clearHistory() }
 }

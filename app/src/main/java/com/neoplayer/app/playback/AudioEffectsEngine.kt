@@ -4,6 +4,7 @@ import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
+import com.neoplayer.app.data.TrackAudioEffectsEntity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -25,6 +26,30 @@ class AudioEffectsEngine {
     val state = _state.asStateFlow()
 
     val presets = listOf("Normal", "Bass Boost", "Rock", "Pop", "Classical", "Jazz", "Electronic", "Vocal", "Custom")
+
+    fun snapshot(songId: Long) = TrackAudioEffectsEntity(
+        songId = songId,
+        preset = _state.value.preset,
+        bass = _state.value.bass,
+        virtualizer = _state.value.virtualizer,
+        loudnessMb = _state.value.loudnessMb,
+        bandLevels = _state.value.bandLevels.joinToString(",")
+    )
+
+    fun applyProfile(profile: TrackAudioEffectsEntity) {
+        applyPreset(profile.preset)
+        setBass(profile.bass)
+        setVirtualizer(profile.virtualizer)
+        setLoudness(profile.loudnessMb)
+        profile.bandLevels.split(",").mapNotNull { it.toShortOrNull() }.forEachIndexed { index, level -> setBand(index, level) }
+    }
+
+    fun resetForTrack() {
+        applyPreset("Normal")
+        setBass(0)
+        setVirtualizer(0)
+        setLoudness(0)
+    }
 
     fun attach(audioSessionId: Int) {
         release()

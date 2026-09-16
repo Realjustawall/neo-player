@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.map
 private val Context.dataStore by preferencesDataStore("neo_settings")
 
 enum class ThemeMode { SYSTEM, DARK, LIGHT, AMOLED }
-enum class Accent { ORANGE, GREEN, RED, BLUE, CUSTARD, CUSTOM }
+enum class Accent { ORANGE, GREEN, RED, BLUE, CUSTARD, PURPLE, CYAN, PINK, INDIGO, TEAL, GOLD, CUSTOM }
 
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.DARK,
@@ -30,6 +30,7 @@ data class AppSettings(
     val romanizationEnabled: Boolean = true,
     val lyricsFontSize: Int = 20,
     val lyricsAutoScroll: Boolean = true
+    val crossfadeMs: Long = 0L
 )
 
 class SettingsRepository(private val context: Context) {
@@ -49,6 +50,7 @@ class SettingsRepository(private val context: Context) {
         val romanization = booleanPreferencesKey("lyrics_romanization")
         val lyricsFontSize = intPreferencesKey("lyrics_font_size")
         val lyricsAutoScroll = booleanPreferencesKey("lyrics_auto_scroll")
+        val crossfadeMs = androidx.datastore.preferences.core.longPreferencesKey("crossfade_ms")
     }
 
     val values: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -68,6 +70,7 @@ class SettingsRepository(private val context: Context) {
             romanizationEnabled = p[Keys.romanization] ?: true,
             lyricsFontSize = p[Keys.lyricsFontSize] ?: 20,
             lyricsAutoScroll = p[Keys.lyricsAutoScroll] ?: true
+            crossfadeMs = p[Keys.crossfadeMs] ?: 0L
         )
     }
 
@@ -85,4 +88,5 @@ class SettingsRepository(private val context: Context) {
     suspend fun setRomanization(value: Boolean) = context.dataStore.edit { it[Keys.romanization] = value }
     suspend fun setLyricsFontSize(value: Int) = context.dataStore.edit { it[Keys.lyricsFontSize] = value }
     suspend fun setLyricsAutoScroll(value: Boolean) = context.dataStore.edit { it[Keys.lyricsAutoScroll] = value }
+    suspend fun setCrossfadeMs(value: Long) = context.dataStore.edit { it[Keys.crossfadeMs] = value.coerceIn(0L, 12_000L) }
 }

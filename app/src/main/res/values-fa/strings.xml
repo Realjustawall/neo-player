@@ -51,6 +51,9 @@
     <string name="clear">پاک کردن</string>
     <string name="done">تمام</string>
     <string name="play_next">پخش بعدی</string>
+    <string name="start_radio">شروع رادیوی محلی</string>
+    <string name="track_effect_profile">افکت صوتی آهنگ فعلی</string>
+    <string name="track_effect_profile_summary">تغییرات برای هر آهنگ جداگانه ذخیره می‌شوند</string>
     <string name="add_to_queue">افزودن به صف</string>
     <string name="song_information">اطلاعات آهنگ</string>
     <string name="edit_library_metadata">ویرایش اطلاعات کتابخانه</string>
@@ -107,6 +110,8 @@
     <string name="include">افزودن دوباره</string>
     <string name="playback">پخش</string>
     <string name="gapless_automatic">گذار بدون فاصله برای فایل‌های دارای فرادادهٔ سازگار، به‌طور خودکار توسط Media3 اعمال می‌شود.</string>
+    <string name="crossfade">محو شدن بین آهنگ‌ها</string>
+    <string name="off">خاموش</string>
     <string name="audio">صدا</string>
     <string name="bass_boost">تقویت بیس</string>
     <string name="virtualizer">مجازی‌ساز</string>
@@ -136,6 +141,12 @@
     <string name="red">قرمز</string>
     <string name="blue">آبی</string>
     <string name="custard">کاستارد</string>
+    <string name="purple">بنفش</string>
+    <string name="cyan">فیروزه‌ای</string>
+    <string name="pink">صورتی</string>
+    <string name="indigo">نیلی</string>
+    <string name="teal">سبزآبی</string>
+    <string name="gold">طلایی</string>
     <string name="normal">عادی</string>
     <string name="rock">راک</string>
     <string name="pop">پاپ</string>
@@ -166,6 +177,7 @@
     <string name="move_up">انتقال به بالا</string>
     <string name="move_down">انتقال به پایین</string>
     <string name="remove">برداشتن</string>
+    <string name="reorder">مرتب‌سازی</string>
     <string name="more">بیشتر</string>
     <string name="play_pause">پخش یا مکث</string>
     <string name="next">بعدی</string>
@@ -173,4 +185,6 @@
     <string name="repeat">تکرار</string>
     <string name="minimize">کوچک‌کردن</string>
     <string name="playback_error">خطای پخش: %1$s</string>
+    <string name="current_line">خط جاری</string>
+    <string name="time_mix">میکس متناسب با زمان</string>
 </resources>

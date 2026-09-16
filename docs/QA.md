@@ -1,4 +1,4 @@
-# Alpha 0.2 QA checklist
+# Alpha 0.3 QA checklist
 
 Use at least Android 8/API 26, Android 12/API 31, and Android 15/API 35. Test one Persian-locale device and one library above 5,000 tracks.
 

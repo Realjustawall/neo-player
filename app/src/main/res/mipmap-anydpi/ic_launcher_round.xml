@@ -1,3 +1,1 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#101010" android:pathData="M54,0a54,54 0,1 0,0 108a54,54 0,1 0,0 -108"/><path android:fillColor="#FF7A1A" android:pathData="M18,76 L18,32 C18,26 25,23 29,28 L61,65 L61,32 C61,27 65,23 70,23 C75,23 79,27 79,32 L79,76 C79,82 72,85 68,80 L36,43 L36,76 C36,81 32,85 27,85 C22,85 18,81 18,76 Z"/>
-</vector>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android" android:src="@drawable/neo_logo" android:gravity="fill" />

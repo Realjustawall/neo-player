@@ -2,10 +2,20 @@ package com.neoplayer.app.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.collect
 import com.neoplayer.app.lyrics.LyricsProviderRegistry
+import com.neoplayer.app.lyrics.SidecarLyricsLoader
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
 
-class MusicRepository(private val dao: MusicDao, private val scanner: MediaStoreScanner, private val lyricsProviders: LyricsProviderRegistry) {
+class MusicRepository(private val dao: MusicDao, private val scanner: MediaStoreScanner, private val lyricsProviders: LyricsProviderRegistry, private val sidecarLyrics: SidecarLyricsLoader? = null) {
+    private data class CachedSearch(val at: Long, val values: List<SongEntity>)
+    private val searchCache = object : LinkedHashMap<String, CachedSearch>(32, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedSearch>?) = size > 32
+    }
     val songs = dao.songs()
+    val songsPaged = Pager(PagingConfig(pageSize = 80, prefetchDistance = 24, enablePlaceholders = false)) { dao.songsPaged() }.flow
     val albums = dao.albums()
     val artists = dao.artists()
     val genres = dao.genres()
@@ -17,13 +27,21 @@ class MusicRepository(private val dao: MusicDao, private val scanner: MediaStore
     val histories = dao.histories()
     val excludedFolders = dao.excludedFolders()
 
-    fun search(query: String) = if (query.isBlank()) songs else dao.search(query.trim())
+    fun search(query: String) = if (query.isBlank()) songs else flow {
+        val key = query.trim().lowercase()
+        val cached = synchronized(searchCache) { searchCache[key]?.takeIf { System.currentTimeMillis() - it.at < 30_000 }?.values }
+        cached?.let { emit(it) }
+        dao.search(key).collect { values ->
+            synchronized(searchCache) { searchCache[key] = CachedSearch(System.currentTimeMillis(), values) }
+            emit(values)
+        }
+    }
     suspend fun rescan(minDurationMs: Long = 10_000): Int {
         val excluded = dao.excludedFolders().first().toSet()
         val overrides = dao.metadataOverrides().associateBy { it.songId }
         return scanner.scan(minDurationMs).filterNot { song -> excluded.any { path -> song.relativePath.startsWith(path) } }
             .map { song -> overrides[song.id]?.let { value -> song.copy(title = value.title, artist = value.artist, album = value.album, genre = value.genre, year = value.year) } ?: song }
-            .also { dao.replaceLibrary(it) }.size
+            .also { dao.replaceLibrary(it); synchronized(searchCache) { searchCache.clear() } }.size
     }
     suspend fun toggleFavorite(id: Long) = if (dao.isFavorite(id)) dao.removeFavorite(id) else dao.addFavorite(FavoriteEntity(id))
     suspend fun toggleFavoriteCollection(type: String, key: String) = if (dao.isFavoriteCollection(type, key)) dao.removeFavoriteCollection(type, key) else dao.addFavoriteCollection(FavoriteCollectionEntity(type, key))
@@ -51,8 +69,18 @@ class MusicRepository(private val dao: MusicDao, private val scanner: MediaStore
     suspend fun reorderCategory(id: Long, songs: List<Long>) = songs.forEachIndexed { index, songId -> dao.setCategoryPosition(id, songId, index) }
     fun lyrics(songId: Long): Flow<LyricsEntity?> = dao.lyrics(songId)
     suspend fun saveLyrics(value: LyricsEntity) = dao.saveLyrics(value)
+    suspend fun loadSidecarLyrics(songId: Long): Boolean {
+        val song = dao.song(songId) ?: return false
+        val found = sidecarLyrics?.load(song) ?: return false
+        dao.saveLyrics(LyricsEntity(songId, found.first, synchronized = found.second, source = "sidecar"))
+        return true
+    }
     suspend fun fetchLyrics(songId: Long): Boolean {
         val song = dao.song(songId) ?: return false
+        sidecarLyrics?.load(song)?.let { (text, synced) ->
+            dao.saveLyrics(LyricsEntity(songId, text, synchronized = synced, source = "sidecar"))
+            return true
+        }
         val found = lyricsProviders.find(song) ?: return false
         dao.saveLyrics(LyricsEntity(songId, found.original, found.translation, found.romanization, found.synchronized, found.source))
         return true
@@ -74,4 +102,6 @@ class MusicRepository(private val dao: MusicDao, private val scanner: MediaStore
         dao.saveHistory(previous.copy(skipCount = previous.skipCount + 1))
     }
     suspend fun clearHistory() = dao.clearHistory()
+    suspend fun trackEffects(songId: Long) = dao.trackEffects(songId)
+    suspend fun saveTrackEffects(value: TrackAudioEffectsEntity) = dao.saveTrackEffects(value)
 }

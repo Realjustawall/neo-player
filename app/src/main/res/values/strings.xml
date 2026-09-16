@@ -51,6 +51,9 @@
     <string name="clear">Clear</string>
     <string name="done">Done</string>
     <string name="play_next">Play next</string>
+    <string name="start_radio">Start local radio</string>
+    <string name="track_effect_profile">Audio effects for current track</string>
+    <string name="track_effect_profile_summary">Changes are saved separately for each song</string>
     <string name="add_to_queue">Add to queue</string>
     <string name="song_information">Song information</string>
     <string name="edit_library_metadata">Edit library metadata</string>
@@ -107,6 +110,8 @@
     <string name="include">Include</string>
     <string name="playback">Playback</string>
     <string name="gapless_automatic">Gapless transitions are applied automatically by Media3 when compatible encoder metadata is present.</string>
+    <string name="crossfade">Crossfade</string>
+    <string name="off">Off</string>
     <string name="audio">Audio</string>
     <string name="bass_boost">Bass boost</string>
     <string name="virtualizer">Virtualizer</string>
@@ -136,6 +141,12 @@
     <string name="red">Red</string>
     <string name="blue">Blue</string>
     <string name="custard">Custard</string>
+    <string name="purple">Purple</string>
+    <string name="cyan">Cyan</string>
+    <string name="pink">Pink</string>
+    <string name="indigo">Indigo</string>
+    <string name="teal">Teal</string>
+    <string name="gold">Gold</string>
     <string name="normal">Normal</string>
     <string name="rock">Rock</string>
     <string name="pop">Pop</string>
@@ -166,6 +177,7 @@
     <string name="move_up">Move up</string>
     <string name="move_down">Move down</string>
     <string name="remove">Remove</string>
+    <string name="reorder">Reorder</string>
     <string name="more">More</string>
     <string name="play_pause">Play or pause</string>
     <string name="next">Next</string>
@@ -173,4 +185,6 @@
     <string name="repeat">Repeat</string>
     <string name="minimize">Minimize</string>
     <string name="playback_error">Playback error: %1$s</string>
+    <string name="current_line">Current line</string>
+    <string name="time_mix">Time-of-day mix</string>
 </resources>

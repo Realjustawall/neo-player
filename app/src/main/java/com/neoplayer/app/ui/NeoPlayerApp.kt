@@ -6,6 +6,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.MediaMetadataRetriever
 import android.media.audiofx.AudioEffect
 import android.net.Uri
 import android.os.Build
@@ -26,6 +27,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,10 +44,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.animateScrollToItem
+import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -57,6 +63,7 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Folder
@@ -94,6 +101,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -121,6 +129,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -132,9 +141,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.consume
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -143,15 +154,22 @@ import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.neoplayer.app.BuildConfig
 import com.neoplayer.app.R
 import com.neoplayer.app.data.CategoryEntity
 import com.neoplayer.app.data.PlaylistEntity
 import com.neoplayer.app.data.SongEntity
+import com.neoplayer.app.domain.SmartMixEngine
 import com.neoplayer.app.lyrics.LrcParser
 import com.neoplayer.app.settings.Accent
 import com.neoplayer.app.settings.ThemeMode
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Locale
 
 private enum class Destination(val label: Int, val icon: ImageVector) {
@@ -182,8 +200,8 @@ private fun PermissionGate(vm: MainViewModel, content: @Composable () -> Unit) {
     } else {
         Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(88.dp).clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.MusicNote, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                Box(Modifier.size(120.dp).clip(RoundedCornerShape(28.dp)).background(Color.Black), contentAlignment = Alignment.Center) {
+                    Image(painterResource(R.drawable.neo_logo), contentDescription = stringResource(R.string.app_name), modifier = Modifier.fillMaxSize().padding(8.dp), contentScale = ContentScale.Fit)
                 }
                 Spacer(Modifier.height(28.dp))
                 Text(stringResource(R.string.permission_title), style = MaterialTheme.typography.headlineMedium)
@@ -257,19 +275,23 @@ private fun HomeScreen(vm: MainViewModel) {
     val histories by vm.histories.collectAsState()
     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
     val greeting = stringResource(when (hour) { in 5..11 -> R.string.good_morning; in 12..17 -> R.string.good_afternoon; else -> R.string.good_evening })
+    val recentSongs = remember(songs) { songs.sortedByDescending { it.dateAdded }.take(8) }
+    val liked = remember(songs, favorites) { songs.filter { favorites.contains(it.id) }.take(8) }
+    val playCounts = remember(histories) { histories.associate { it.songId to it.playCount } }
+    val mostPlayed = remember(songs, playCounts) { songs.filter { playCounts.getOrDefault(it.id, 0) > 0 }.sortedByDescending { playCounts[it.id] }.take(8) }
+    val neverPlayed = remember(songs, playCounts) { songs.filterNot { playCounts.containsKey(it.id) }.take(8) }
+    val recentlyPlayed = remember(songs, histories) { SmartMixEngine.recentlyPlayed(songs, histories).take(8) }
+    val forgotten = remember(songs, favorites, histories) { SmartMixEngine.forgottenFavorites(songs, favorites.toSet(), histories).take(8) }
+    val dayMix = remember(songs, favorites, hour) { SmartMixEngine.timeOfDay(songs, favorites.toSet(), hour).take(8) }
     LazyColumn(Modifier.fillMaxSize()) {
         item { ScreenHeader(greeting, stringResource(R.string.your_music_stays_yours)) }
         if (songs.isEmpty()) item { EmptyLibrary(vm) }
         else {
             item { SectionTitle(stringResource(R.string.recently_added)) }
-            items(songs.sortedByDescending { it.dateAdded }.take(8), key = { "recent-${it.id}" }) { SongRow(it, favorites.contains(it.id), vm, songs) }
+            items(recentSongs, key = { "recent-${it.id}" }) { SongRow(it, favorites.contains(it.id), vm, recentSongs) }
             item { SectionTitle(stringResource(R.string.liked_songs)) }
-            val liked = songs.filter { favorites.contains(it.id) }.take(8)
             if (liked.isEmpty()) item { HintCard(stringResource(R.string.favorites_hint)) }
             items(liked, key = { "liked-${it.id}" }) { SongRow(it, true, vm, liked) }
-            val playCounts = histories.associate { it.songId to it.playCount }
-            val mostPlayed = songs.filter { playCounts.getOrDefault(it.id, 0) > 0 }.sortedByDescending { playCounts[it.id] }.take(8)
-            val neverPlayed = songs.filterNot { playCounts.containsKey(it.id) }.take(8)
             item { SectionTitle(stringResource(R.string.smart_mixes)) }
             if (mostPlayed.isNotEmpty()) {
                 item { HintCard(stringResource(R.string.most_played)) }
@@ -278,6 +300,18 @@ private fun HomeScreen(vm: MainViewModel) {
             if (neverPlayed.isNotEmpty()) {
                 item { HintCard(stringResource(R.string.never_played)) }
                 items(neverPlayed, key = { "never-${it.id}" }) { SongRow(it, favorites.contains(it.id), vm, neverPlayed) }
+            }
+            if (recentlyPlayed.isNotEmpty()) {
+                item { SectionTitle(stringResource(R.string.recently_played)) }
+                items(recentlyPlayed, key = { "recently-${it.id}" }) { SongRow(it, favorites.contains(it.id), vm, recentlyPlayed) }
+            }
+            if (forgotten.isNotEmpty()) {
+                item { SectionTitle(stringResource(R.string.forgotten_favorites)) }
+                items(forgotten, key = { "forgotten-${it.id}" }) { SongRow(it, true, vm, forgotten) }
+            }
+            if (dayMix.isNotEmpty()) {
+                item { SectionTitle(stringResource(R.string.time_mix)) }
+                items(dayMix, key = { "day-${it.id}" }) { SongRow(it, favorites.contains(it.id), vm, dayMix) }
             }
         }
     }
@@ -307,13 +341,37 @@ private fun SearchScreen(vm: MainViewModel) {
     val results by vm.results.collectAsState()
     val favorites by vm.favoriteIds.collectAsState()
     val query by vm.query.collectAsState()
+    val playlists by vm.playlists.collectAsState()
+    val categories by vm.categories.collectAsState()
+    val folders by vm.folders.collectAsState()
+    var filter by rememberSaveable { mutableStateOf("All") }
+    val filtered = remember(results, filter, query) { if (query.isBlank()) emptyList() else when (filter) {
+        "Songs" -> results
+        "Artists" -> results.filter { it.artist.contains(query, ignoreCase = true) }
+        "Albums" -> results.filter { it.album.contains(query, ignoreCase = true) }
+        "Genres" -> results.filter { it.genre.contains(query, ignoreCase = true) }
+        else -> results
+    } }
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(stringResource(R.string.search))
         OutlinedTextField(query, { vm.query.value = it }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), singleLine = true,
-            leadingIcon = { Icon(Icons.Rounded.Search, null) }, placeholder = { Text(stringResource(R.string.search_hint)) })
+            leadingIcon = { Icon(Icons.Rounded.Search, null) }, placeholder = { Text(stringResource(R.string.search_hint)) },
+            trailingIcon = { if (query.isNotEmpty()) IconButton({ vm.query.value = "" }) { Icon(Icons.Rounded.Close, stringResource(R.string.clear)) } },
+            shape = RoundedCornerShape(20.dp))
+        LazyRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            listOf("All" to R.string.library, "Songs" to R.string.songs, "Artists" to R.string.artists, "Albums" to R.string.albums, "Genres" to R.string.genres, "Playlists" to R.string.playlists, "Categories" to R.string.categories, "Folders" to R.string.folders).forEach { option ->
+                item { FilterChip(selected = filter == option.first, onClick = { filter = option.first }, label = { Text(stringResource(option.second)) }, modifier = Modifier.padding(end = 8.dp)) }
+            }
+        }
         LazyColumn(Modifier.fillMaxSize().padding(top = 10.dp)) {
-            if (query.isNotBlank() && results.isEmpty()) item { HintCard(stringResource(R.string.no_search_results)) }
-            items(results, key = { it.id }) { SongRow(it, favorites.contains(it.id), vm, results) }
+            val playlistResults = if (query.isNotBlank() && (filter == "All" || filter == "Playlists")) playlists.filter { it.title.contains(query, true) || it.description.contains(query, true) } else emptyList()
+            val categoryResults = if (query.isNotBlank() && (filter == "All" || filter == "Categories")) categories.filter { it.title.contains(query, true) || it.description.contains(query, true) } else emptyList()
+            val folderResults = if (query.isNotBlank() && (filter == "All" || filter == "Folders")) folders.filter { it.relativePath.contains(query, true) } else emptyList()
+            if (query.isNotBlank() && filtered.isEmpty() && playlistResults.isEmpty() && categoryResults.isEmpty() && folderResults.isEmpty()) item { HintCard(stringResource(R.string.no_search_results)) }
+            items(playlistResults, key = { "playlist-${it.id}" }) { value -> LibraryFacetRow(Icons.Rounded.QueueMusic, value.title, stringResource(R.string.playlists), { vm.playPlaylist(value.id) }) }
+            items(categoryResults, key = { "category-${it.id}" }) { value -> LibraryFacetRow(Icons.Rounded.Category, value.title, stringResource(R.string.categories), { vm.playCategory(value.id) }) }
+            items(folderResults, key = { "folder-${it.relativePath}" }) { value -> LibraryFacetRow(Icons.Rounded.Folder, value.relativePath, stringResource(R.string.folders), { vm.songs.value.filter { it.relativePath == value.relativePath }.firstOrNull()?.let { vm.play(it, vm.songs.value.filter { song -> song.relativePath == value.relativePath }) } }) }
+            if (filter != "Playlists" && filter != "Categories" && filter != "Folders") items(filtered, key = { it.id }) { SongRow(it, favorites.contains(it.id), vm, filtered) }
         }
     }
 }
@@ -361,13 +419,18 @@ private fun LibraryScreen(vm: MainViewModel) {
         "Recently played" -> compareBy { stats[it.id]?.lastPlayedAt ?: 0 }
         else -> compareBy { it.title.lowercase() }
     }
-    val sorted = songs.sortedWith(if (ascending) comparator else comparator.reversed())
+    val sorted = remember(songs, history, sort, ascending) { songs.sortedWith(if (ascending) comparator else comparator.reversed()) }
     Column {
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box { TextButton({ menu = true }) { Icon(Icons.Rounded.Sort, null); Text(stringResource(sortOptions.first { it.first == sort }.second)) }; DropdownMenu(menu, { menu = false }) { sortOptions.forEach { option -> DropdownMenuItem({ Text(stringResource(option.second)) }, { sort = option.first; menu = false }) } } }
             Spacer(Modifier.weight(1f)); IconButton({ ascending = !ascending }) { Icon(if (ascending) Icons.Rounded.ArrowUpward else Icons.Rounded.ArrowDownward, stringResource(R.string.sort_direction)) }
         }
-        LazyColumn { items(sorted, key = { it.id }) { SongRow(it, favorites.contains(it.id), vm, sorted) } }
+        if (sort == "Title" && ascending) {
+            val paged = vm.songsPaged.collectAsLazyPagingItems()
+            LazyColumn { items(paged.itemCount, key = { index -> paged[index]?.id ?: "loading-$index" }) { index -> paged[index]?.let { SongRow(it, favorites.contains(it.id), vm, songs) } } }
+        } else {
+            LazyColumn { items(sorted, key = { it.id }) { SongRow(it, favorites.contains(it.id), vm, sorted) } }
+        }
     }
 }
 
@@ -476,7 +539,7 @@ private fun CollectionEditor(vm: MainViewModel, id: Long, initialTitle: String, 
         if (tracks.isEmpty()) HintCard(stringResource(R.string.empty_collection))
         LazyColumn { itemsIndexed(tracks, key = { _, song -> song.id }) { index, song ->
             Row(Modifier.fillMaxWidth().clickable { vm.play(song, tracks) }.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Artwork(song.artworkUri, Modifier.size(48.dp))
+                Artwork(song.artworkUri, Modifier.size(48.dp), sourceUri = song.uri, sizePx = 128)
                 Column(Modifier.weight(1f).padding(horizontal = 10.dp)) { Text(song.title, maxLines = 1); Text(song.artist, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
                 IconButton({ if (index > 0) vm.reorderCollection(id, tracks.map { it.id }.toMutableList().apply { add(index - 1, removeAt(index)) }, playlist) }, enabled = index > 0) { Icon(Icons.Rounded.KeyboardArrowUp, stringResource(R.string.move_up)) }
                 IconButton({ if (index < tracks.lastIndex) vm.reorderCollection(id, tracks.map { it.id }.toMutableList().apply { add(index + 1, removeAt(index)) }, playlist) }, enabled = index < tracks.lastIndex) { Icon(Icons.Rounded.KeyboardArrowDown, stringResource(R.string.move_down)) }
@@ -503,7 +566,7 @@ private fun SongRow(song: SongEntity, favorite: Boolean, vm: MainViewModel, list
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result -> if (result.resultCode == Activity.RESULT_OK) vm.rescan() }
     val playlists by vm.playlists.collectAsState(); val categories by vm.categories.collectAsState()
     Row(Modifier.fillMaxWidth().clickable { vm.play(song, list) }.padding(start = 16.dp, top = 7.dp, bottom = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-        Artwork(song.artworkUri, Modifier.size(54.dp))
+        Artwork(song.artworkUri, Modifier.size(54.dp), sourceUri = song.uri, sizePx = 160)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
             Text("${song.artist} • ${formatDuration(song.durationMs)}", maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
@@ -512,6 +575,7 @@ private fun SongRow(song: SongEntity, favorite: Boolean, vm: MainViewModel, list
         Box { IconButton({ menu = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more)) }
             DropdownMenu(menu, { menu = false }) {
                 DropdownMenuItem({ Text(stringResource(R.string.play_next)) }, { vm.addNext(song); menu = false })
+                DropdownMenuItem({ Text(stringResource(R.string.start_radio)) }, { vm.startRadio(song); menu = false })
                 DropdownMenuItem({ Text(stringResource(R.string.add_to_queue)) }, { vm.addQueue(song); menu = false })
                 if (playlists.isNotEmpty()) DropdownMenuItem({ Text(stringResource(R.string.add_to_playlist)) }, { addTarget = "playlist"; menu = false })
                 if (categories.isNotEmpty()) DropdownMenuItem({ Text(stringResource(R.string.add_to_category)) }, { addTarget = "category"; menu = false })
@@ -560,10 +624,31 @@ private fun SongRow(song: SongEntity, favorite: Boolean, vm: MainViewModel, list
 }
 
 @Composable
-private fun Artwork(uri: String?, modifier: Modifier = Modifier) {
-    Box(modifier.clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = .65f), MaterialTheme.colorScheme.surfaceVariant))), contentAlignment = Alignment.Center) {
+private suspend fun embeddedArtwork(context: android.content.Context, sourceUri: String?): String? = withContext(Dispatchers.IO) {
+    if (sourceUri.isNullOrBlank()) return@withContext null
+    val file = File(context.cacheDir, "art_" + sourceUri.hashCode() + ".jpg")
+    if (file.exists() && file.length() > 0L) return@withContext file.absolutePath
+    val retriever = MediaMetadataRetriever()
+    runCatching {
+        retriever.setDataSource(context, Uri.parse(sourceUri))
+        retriever.embeddedPicture?.let { bytes -> file.outputStream().use { it.write(bytes) }; file.absolutePath }
+    }.getOrNull().also { retriever.release() }
+}
+
+@Composable
+private fun Artwork(uri: String?, modifier: Modifier = Modifier, sourceUri: String? = null, sizePx: Int = 256) {
+    val context = LocalContext.current
+    var embedded by remember(sourceUri) { mutableStateOf<String?>(null) }
+    LaunchedEffect(sourceUri) { embedded = embeddedArtwork(context, sourceUri) }
+    val imageData = embedded ?: uri
+    val model = remember(imageData, sizePx) {
+        ImageRequest.Builder(context).data(imageData).size(sizePx).crossfade(false)
+            .memoryCacheKey(imageData.orEmpty()).diskCacheKey(imageData.orEmpty())
+            .diskCachePolicy(CachePolicy.ENABLED).build()
+    }
+    Box(modifier.aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary.copy(alpha = .65f), MaterialTheme.colorScheme.surfaceVariant))), contentAlignment = Alignment.Center) {
         Icon(Icons.Rounded.MusicNote, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = .8f))
-        AsyncImage(uri, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        AsyncImage(model, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
     }
 }
 
@@ -571,15 +656,17 @@ private fun Artwork(uri: String?, modifier: Modifier = Modifier) {
 private fun MiniPlayer(vm: MainViewModel, open: () -> Unit) {
     val state by vm.playback.collectAsState()
     val item = state.current ?: return
-    Surface(Modifier.fillMaxWidth().height(72.dp).padding(horizontal = 8.dp, vertical = 4.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = open), color = MaterialTheme.colorScheme.surfaceVariant) {
-        Column { Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Artwork(item.mediaMetadata.artworkUri?.toString(), Modifier.size(64.dp).padding(6.dp))
-            Column(Modifier.weight(1f)) { Text(item.mediaMetadata.title?.toString().orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); Text(item.mediaMetadata.artist?.toString().orEmpty(), maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
-            IconButton(vm::togglePlayback) { Icon(if (state.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, stringResource(R.string.play_pause)) }
-            IconButton(vm::next) { Icon(Icons.Rounded.SkipNext, stringResource(R.string.next)) }
-        }
+    Surface(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = open), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Box(Modifier.fillMaxWidth().height(68.dp)) {
+            Row(Modifier.fillMaxSize().padding(bottom = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                Artwork(item.mediaMetadata.artworkUri?.toString(), Modifier.padding(6.dp).size(56.dp), sourceUri = item.localConfiguration?.uri?.toString(), sizePx = 160)
+                Column(Modifier.weight(1f).padding(horizontal = 8.dp)) { Text(item.mediaMetadata.title?.toString().orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); Text(item.mediaMetadata.artist?.toString().orEmpty(), maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
+                IconButton(vm::togglePlayback) { Icon(if (state.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, stringResource(R.string.play_pause)) }
+                IconButton(vm::next) { Icon(Icons.Rounded.SkipNext, stringResource(R.string.next)) }
+            }
             val progress = if (state.durationMs > 0) state.positionMs.toFloat() / state.durationMs else 0f
-            Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(2.dp).background(MaterialTheme.colorScheme.primary))
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(3.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = .14f)))
+            Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(progress.coerceIn(0f, 1f)).height(3.dp).background(MaterialTheme.colorScheme.primary))
         }
     }
 }
@@ -619,9 +706,9 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
     var horizontalDrag by remember { mutableFloatStateOf(0f) }
     Column(Modifier.fillMaxSize().padding(horizontal = 26.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.weight(.15f))
-        Artwork(item.mediaMetadata.artworkUri?.toString(), Modifier.fillMaxWidth().weight(1f).pointerInput(Unit) {
+        Artwork(item.mediaMetadata.artworkUri?.toString(), Modifier.fillMaxWidth().pointerInput(Unit) {
             detectHorizontalDragGestures(onHorizontalDrag = { _, delta -> horizontalDrag += delta }, onDragEnd = { if (horizontalDrag < -80) vm.next() else if (horizontalDrag > 80) vm.previous(); horizontalDrag = 0f })
-        })
+        }, sourceUri = item.localConfiguration?.uri?.toString(), sizePx = 1024)
         Spacer(Modifier.height(26.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) { Text(item.mediaMetadata.title?.toString().orEmpty(), style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis); Text(item.mediaMetadata.artist?.toString().orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp) }
@@ -663,9 +750,26 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
     val state by vm.playback.collectAsState()
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) { Text(stringResource(R.string.queue), Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium); TextButton(vm::clearQueue) { Text(stringResource(R.string.clear)) } }
-        LazyColumn { itemsIndexed(state.queue, key = { index, item -> "$index-${item.mediaId}" }) { index, item ->
-            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Artwork(item.mediaMetadata.artworkUri?.toString(), Modifier.size(48.dp)); Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(item.mediaMetadata.title?.toString().orEmpty(), maxLines = 1); Text(item.mediaMetadata.artist?.toString().orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
+        LazyColumn { itemsIndexed(state.queue, key = { _, item -> item.mediaId }) { index, item ->
+            var currentIndex by remember(item.mediaId) { mutableIntStateOf(index) }
+            var dragDistance by remember(item.mediaId) { mutableFloatStateOf(0f) }
+            Row(Modifier.fillMaxWidth().padding(12.dp).pointerInput(item.mediaId) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { currentIndex = index; dragDistance = 0f },
+                    onDragCancel = { dragDistance = 0f },
+                    onDragEnd = { dragDistance = 0f }
+                ) { change, amount ->
+                    change.consume()
+                    dragDistance += amount.y
+                    if (dragDistance > 56f && currentIndex < state.queue.lastIndex) {
+                        vm.moveQueueItem(currentIndex, currentIndex + 1); currentIndex += 1; dragDistance = 0f
+                    } else if (dragDistance < -56f && currentIndex > 0) {
+                        vm.moveQueueItem(currentIndex, currentIndex - 1); currentIndex -= 1; dragDistance = 0f
+                    }
+                }
+            }, verticalAlignment = Alignment.CenterVertically) {
+                Artwork(item.mediaMetadata.artworkUri?.toString(), Modifier.size(48.dp), sourceUri = item.localConfiguration?.uri?.toString(), sizePx = 128); Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(item.mediaMetadata.title?.toString().orEmpty(), maxLines = 1); Text(item.mediaMetadata.artist?.toString().orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
+                Icon(Icons.Rounded.DragHandle, stringResource(R.string.reorder), Modifier.padding(horizontal = 4.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 IconButton({ vm.moveQueueItem(index, index - 1) }, enabled = index > 0) { Icon(Icons.Rounded.KeyboardArrowUp, stringResource(R.string.move_up)) }
                 IconButton({ vm.moveQueueItem(index, index + 1) }, enabled = index < state.queue.lastIndex) { Icon(Icons.Rounded.KeyboardArrowDown, stringResource(R.string.move_down)) }
                 IconButton({ vm.removeQueueItem(index) }) { Icon(Icons.Rounded.Close, stringResource(R.string.remove)) }
@@ -676,12 +780,15 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
 
 @Composable private fun LyricsPanel(vm: MainViewModel, songId: Long, position: Long) {
     val lyrics by vm.lyrics(songId).collectAsState(initial = null)
+    LaunchedEffect(songId) { vm.loadSidecarLyrics(songId) }
     val settings by vm.settings.collectAsState()
     var editing by remember { mutableStateOf(false) }; var draft by remember(lyrics?.original) { mutableStateOf(lyrics?.original.orEmpty()) }
     var translation by remember(lyrics?.translation) { mutableStateOf(lyrics?.translation.orEmpty()) }
     var romanization by remember(lyrics?.romanization) { mutableStateOf(lyrics?.romanization.orEmpty()) }
     var syncLine by remember { mutableIntStateOf(0) }
     val lines = remember(lyrics?.original) { LrcParser.parse(lyrics?.original.orEmpty()) }
+    val lyricsListState = rememberLazyListState()
+    val lyricsScope = rememberCoroutineScope()
     val context = LocalContext.current
     val loading by vm.lyricsLoading.collectAsState()
     val providerError by vm.lyricsError.collectAsState()
@@ -705,7 +812,11 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Rounded.Lyrics, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary); Text(stringResource(R.string.no_lyrics)); providerError?.let { Text(it, color = MaterialTheme.colorScheme.error) }; if (vm.onlineLyricsAvailable && settings.lyricsMode != "offline") Button({ vm.fetchLyrics(songId) }, enabled = !loading) { if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text(stringResource(R.string.fetch_lyrics)) }; TextButton({ editing = true }) { Text(stringResource(R.string.add_lyrics)) } } }
         } else if (lines.isNotEmpty()) {
             val active = LrcParser.activeIndex(lines, position)
-            LazyColumn(Modifier.fillMaxSize()) { itemsIndexed(lines) { index, line -> Column(Modifier.padding(vertical = 10.dp)) { Text(line.text.ifBlank { "♪" }, fontSize = if (index == active) (settings.lyricsFontSize + 4).sp else settings.lyricsFontSize.sp, fontWeight = if (index == active) FontWeight.Bold else FontWeight.Normal, color = if (index == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant); translation.lines().getOrNull(index)?.takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = (settings.lyricsFontSize - 3).coerceAtLeast(12).sp) }; romanization.lines().getOrNull(index)?.takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .75f), fontSize = (settings.lyricsFontSize - 4).coerceAtLeast(11).sp) } } } }
+            LaunchedEffect(active, settings.lyricsAutoScroll) { if (settings.lyricsAutoScroll && active >= 0) lyricsListState.animateScrollToItem(active.coerceIn(0, lines.lastIndex)) }
+            Box(Modifier.fillMaxSize()) {
+                LazyColumn(state = lyricsListState, modifier = Modifier.fillMaxSize().padding(bottom = 54.dp)) { itemsIndexed(lines) { index, line -> Column(Modifier.padding(vertical = 10.dp)) { Text(line.text.ifBlank { "♪" }, fontSize = if (index == active) (settings.lyricsFontSize + 4).sp else settings.lyricsFontSize.sp, fontWeight = if (index == active) FontWeight.Bold else FontWeight.Normal, color = if (index == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant); translation.lines().getOrNull(index)?.takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = (settings.lyricsFontSize - 3).coerceAtLeast(12).sp) }; romanization.lines().getOrNull(index)?.takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .75f), fontSize = (settings.lyricsFontSize - 4).coerceAtLeast(11).sp) } } } }
+                if (active >= 0) OutlinedButton({ lyricsScope.launch { lyricsListState.animateScrollToItem(active.coerceIn(0, lines.lastIndex)) } }, Modifier.align(Alignment.BottomCenter)) { Text(stringResource(R.string.current_line)) }
+            }
         } else {
             LazyColumn { item { Text(lyrics?.original.orEmpty(), fontSize = 20.sp, lineHeight = 32.sp, modifier = Modifier.padding(vertical = 18.dp)) } }
         }
@@ -714,6 +825,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
 
 @Composable private fun SettingsScreen(vm: MainViewModel) {
     val settings by vm.settings.collectAsState(); var customDialog by remember { mutableStateOf(false) }; var clearHistory by remember { mutableStateOf(false) }
+    val playback by vm.playback.collectAsState()
     val excluded by vm.excludedFolders.collectAsState()
     val audioEffects by vm.audioEffects.collectAsState()
     val context = LocalContext.current
@@ -742,8 +854,10 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
         item { ChoiceRow(stringResource(R.string.minimum_audio_duration), listOf("0s", "10s", "30s", "60s"), listOf(0L, 10_000L, 30_000L, 60_000L).indexOf(settings.minDurationMs).coerceAtLeast(0)) { vm.setMinDuration(listOf(0L, 10_000L, 30_000L, 60_000L)[it]) } }
         if (excluded.isNotEmpty()) item { Column { Text(stringResource(R.string.excluded_folders), Modifier.padding(horizontal = 20.dp)); excluded.forEach { path -> Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Text(path, Modifier.weight(1f)); TextButton({ vm.includeFolder(path) }) { Text(stringResource(R.string.include)) } } } } }
         item { SettingsTitle(stringResource(R.string.playback)) }
+        item { ChoiceRow(stringResource(R.string.crossfade), listOf(stringResource(R.string.off), "3s", "5s", "8s", "12s"), listOf(0L, 3_000L, 5_000L, 8_000L, 12_000L).indexOf(settings.crossfadeMs).coerceAtLeast(0)) { vm.setCrossfadeMs(listOf(0L, 3_000L, 5_000L, 8_000L, 12_000L)[it]) } }
         item { HintCard(stringResource(R.string.gapless_automatic)) }
         item { SettingsTitle(stringResource(R.string.audio)) }
+        item { HintCard(stringResource(R.string.track_effect_profile) + (playback.current?.mediaMetadata?.title?.toString()?.let { " • $it" } ?: "") + "\n" + stringResource(R.string.track_effect_profile_summary)) }
         if (audioEffects.available) {
             item { ChoiceRow(stringResource(R.string.equalizer), listOf(stringResource(R.string.normal), stringResource(R.string.bass_boost), stringResource(R.string.rock), stringResource(R.string.pop), stringResource(R.string.classical), stringResource(R.string.jazz), stringResource(R.string.electronic), stringResource(R.string.vocal), stringResource(R.string.custom)), vm.audioPresets.indexOf(audioEffects.preset).coerceAtLeast(0)) { vm.setAudioPreset(vm.audioPresets[it]) } }
             item { EffectSlider(stringResource(R.string.bass_boost), audioEffects.bass, 1000, vm::setBass) }
@@ -758,7 +872,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
         item { HintCard(stringResource(R.string.privacy_summary)) }
         item { SettingsAction(Icons.Rounded.History, stringResource(R.string.clear_history), stringResource(R.string.clear_history_summary), { clearHistory = true }) }
         item { SettingsTitle(stringResource(R.string.about)) }
-        item { Column(Modifier.padding(20.dp)) { Text("NEO PLAYER", style = MaterialTheme.typography.titleLarge); Text(BuildConfig.DISPLAY_VERSION + " • " + BuildConfig.VERSION_NAME); Spacer(Modifier.height(8.dp)); Text(stringResource(R.string.app_description)); Text(stringResource(R.string.made_by), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp)); Text(stringResource(R.string.build_number, BuildConfig.VERSION_CODE) + "\nLicense: Apache-2.0\n" + stringResource(R.string.libraries_used)) } }
+        item { Column(Modifier.padding(20.dp)) { Text("NEO PLAYER", style = MaterialTheme.typography.titleLarge); Text(BuildConfig.DISPLAY_VERSION + " • " + BuildConfig.VERSION_NAME); Spacer(Modifier.height(8.dp)); Text(stringResource(R.string.app_description)); Text(stringResource(R.string.made_by), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp)); Text(stringResource(R.string.build_number, BuildConfig.VERSION_CODE) + "\nLicense: Apache-2.0") } }
         item { Spacer(Modifier.height(20.dp)) }
     }
     if (customDialog) CustomColorDialog({ customDialog = false }) { vm.setCustomColor(it); customDialog = false }
@@ -777,6 +891,6 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
         confirmButton = { TextButton({ save((0xFF000000 or hex.toLong(16)).toInt()) }, enabled = valid) { Text(stringResource(R.string.apply)) } }, dismissButton = { TextButton(dismiss) { Text(stringResource(R.string.cancel)) } })
 }
 
-private fun accentPreview(accent: Accent, custom: Int) = when (accent) { Accent.ORANGE -> Color(0xFFFF7A1A); Accent.GREEN -> Color(0xFF45D483); Accent.RED -> Color(0xFFFF5364); Accent.BLUE -> Color(0xFF5B8CFF); Accent.CUSTARD -> Color(0xFFE8C978); Accent.CUSTOM -> Color(custom) }
-private fun accentLabel(accent: Accent) = when (accent) { Accent.ORANGE -> R.string.orange; Accent.GREEN -> R.string.green; Accent.RED -> R.string.red; Accent.BLUE -> R.string.blue; Accent.CUSTARD -> R.string.custard; Accent.CUSTOM -> R.string.custom }
+private fun accentPreview(accent: Accent, custom: Int) = when (accent) { Accent.ORANGE -> Color(0xFFFF7A1A); Accent.GREEN -> Color(0xFF45D483); Accent.RED -> Color(0xFFFF5364); Accent.BLUE -> Color(0xFF5B8CFF); Accent.CUSTARD -> Color(0xFFE8C978); Accent.PURPLE -> Color(0xFFB586FF); Accent.CYAN -> Color(0xFF42D9E8); Accent.PINK -> Color(0xFFFF6FAE); Accent.INDIGO -> Color(0xFF7C83FF); Accent.TEAL -> Color(0xFF35C6A5); Accent.GOLD -> Color(0xFFFFB84D); Accent.CUSTOM -> Color(custom) }
+private fun accentLabel(accent: Accent) = when (accent) { Accent.ORANGE -> R.string.orange; Accent.GREEN -> R.string.green; Accent.RED -> R.string.red; Accent.BLUE -> R.string.blue; Accent.CUSTARD -> R.string.custard; Accent.PURPLE -> R.string.purple; Accent.CYAN -> R.string.cyan; Accent.PINK -> R.string.pink; Accent.INDIGO -> R.string.indigo; Accent.TEAL -> R.string.teal; Accent.GOLD -> R.string.gold; Accent.CUSTOM -> R.string.custom }
 private fun formatDuration(ms: Long): String { val total = ms.coerceAtLeast(0) / 1000; return String.format(Locale.US, "%d:%02d", total / 60, total % 60) }

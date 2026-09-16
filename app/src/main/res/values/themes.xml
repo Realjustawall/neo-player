@@ -1,7 +1,7 @@
 <resources>
     <style name="Theme.NeoPlayer.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/neo_splash</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_neo_mark</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/neo_logo</item>
         <item name="postSplashScreenTheme">@style/Theme.NeoPlayer</item>
     </style>
     <style name="Theme.NeoPlayer" parent="android:style/Theme.Material.NoActionBar">

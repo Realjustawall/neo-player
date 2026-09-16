@@ -6,11 +6,13 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import androidx.paging.PagingSource
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MusicDao {
     @Query("SELECT * FROM songs ORDER BY title COLLATE NOCASE") fun songs(): Flow<List<SongEntity>>
+    @Query("SELECT * FROM songs ORDER BY title COLLATE NOCASE") fun songsPaged(): PagingSource<Int, SongEntity>
     @Query("SELECT * FROM songs WHERE title LIKE '%' || :query || '%' OR artist LIKE '%' || :query || '%' OR album LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%' ORDER BY title COLLATE NOCASE LIMIT 200")
     fun search(query: String): Flow<List<SongEntity>>
     @Query("SELECT * FROM songs WHERE id = :id") suspend fun song(id: Long): SongEntity?
@@ -60,6 +62,8 @@ interface MusicDao {
     @Query("SELECT * FROM listening_history WHERE songId = :songId") suspend fun history(songId: Long): ListeningHistoryEntity?
     @Query("DELETE FROM listening_history") suspend fun clearHistory()
     @Query("SELECT * FROM listening_history ORDER BY lastPlayedAt DESC") fun histories(): Flow<List<ListeningHistoryEntity>>
+    @Query("SELECT * FROM track_audio_effects WHERE songId = :songId") suspend fun trackEffects(songId: Long): TrackAudioEffectsEntity?
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveTrackEffects(value: TrackAudioEffectsEntity)
 
     @Query("SELECT path FROM excluded_folders ORDER BY path") fun excludedFolders(): Flow<List<String>>
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun excludeFolder(value: ExcludedFolderEntity)

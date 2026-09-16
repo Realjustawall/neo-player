@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0-alpha — Alpha 0.3
+
+- redesigned search with debounce, category filters, and bounded local results
+- improved artwork geometry with square cover surfaces across player screens
+- rebuilt mini-player progress rail and smart synchronized-lyrics follow mode
+- refined About content to show product credits without an in-app library dump
+
 ## 0.2.0-alpha — In development
 
 - preserved 0.1 data with an explicit Room migration

@@ -22,6 +22,12 @@ private fun accentColor(settings: AppSettings) = when (settings.accent) {
     Accent.RED -> Color(0xFFFF5364)
     Accent.BLUE -> Color(0xFF5B8CFF)
     Accent.CUSTARD -> Color(0xFFE8C978)
+    Accent.PURPLE -> Color(0xFFB586FF)
+    Accent.CYAN -> Color(0xFF42D9E8)
+    Accent.PINK -> Color(0xFFFF6FAE)
+    Accent.INDIGO -> Color(0xFF7C83FF)
+    Accent.TEAL -> Color(0xFF35C6A5)
+    Accent.GOLD -> Color(0xFFFFB84D)
     Accent.CUSTOM -> Color(settings.customColor)
 }
 

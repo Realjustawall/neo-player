@@ -2,7 +2,7 @@
 
 ![NEO PLAYER mark](app/src/main/res/drawable/ic_neo_mark.xml)
 
-**Alpha 0.2 development** (`0.2.0-alpha`) — a modern local-first music player for Android. The immutable initial build remains available as the private `v0.1.0-alpha` Release.
+**Alpha 0.3 development** (`0.3.0-alpha`) — a modern local-first music player for Android. The immutable initial build remains available as the private `v0.1.0-alpha` Release.
 
 NEO PLAYER gives an offline music library an immersive, artwork-led home. There is no account, catalog dependency, tracking, or analytics. Playback and listening data stay on the device.
 
@@ -78,7 +78,7 @@ Lyrics pasted into the editor are saved locally. Standard LRC timestamps such as
 
 ## Current Alpha boundaries
 
-Alpha 0.2 adds hardware-gated audio effects, sleep timer, drag-equivalent accessible reordering, collection artwork, favorite albums/artists/playlists, safe metadata overrides, optional configured online lyrics, layered lyrics, LRC import and manual timestamping. Crossfade, ReplayGain, embedded-tag extraction and direct embedded-tag writing remain device/codec-sensitive and are not falsely advertised where they cannot be implemented reliably.
+Alpha 0.3 adds debounced multi-facet search, square artwork surfaces, a redesigned mini-player progress rail, and smart synchronized-lyrics follow mode. Alpha 0.2 adds hardware-gated audio effects, sleep timer, drag-equivalent accessible reordering, collection artwork, favorite albums/artists/playlists, safe metadata overrides, optional configured online lyrics, layered lyrics, LRC import and manual timestamping. Crossfade, ReplayGain, embedded-tag extraction and direct embedded-tag writing remain device/codec-sensitive and are not falsely advertised where they cannot be implemented reliably.
 
 ## Automation and releases
 

@@ -13,6 +13,7 @@ import com.neoplayer.app.playback.AudioEffectsEngine
 import com.neoplayer.app.settings.SettingsRepository
 import com.neoplayer.app.lyrics.ConfiguredJsonLyricsProvider
 import com.neoplayer.app.lyrics.LyricsProviderRegistry
+import com.neoplayer.app.lyrics.SidecarLyricsLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,7 +42,7 @@ class NeoApplication : Application() {
         lyricsProviders = LyricsProviderRegistry(buildList {
             if (BuildConfig.LYRICS_API_BASE.isNotBlank()) add(ConfiguredJsonLyricsProvider(BuildConfig.LYRICS_API_BASE, BuildConfig.LYRICS_API_KEY))
         })
-        repository = MusicRepository(database.musicDao(), MediaStoreScanner(this), lyricsProviders)
+        repository = MusicRepository(database.musicDao(), MediaStoreScanner(this), lyricsProviders, SidecarLyricsLoader(this))
         settings = SettingsRepository(this)
         playback = PlaybackConnection(this)
         playback.connect()

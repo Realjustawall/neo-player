@@ -49,9 +49,9 @@ jobs:
             echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.1" >> "$GITHUB_ENV"
             echo "RELEASE_TITLE=NEO PLAYER Alpha 0.1" >> "$GITHUB_ENV"
           else
-            echo "APK_FILE=NEO-PLAYER-Alpha-0.2.apk" >> "$GITHUB_ENV"
-            echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.2" >> "$GITHUB_ENV"
-            echo "RELEASE_TITLE=NEO PLAYER Alpha 0.2" >> "$GITHUB_ENV"
+            echo "APK_FILE=NEO-PLAYER-Alpha-0.3.apk" >> "$GITHUB_ENV"
+            echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.3" >> "$GITHUB_ENV"
+            echo "RELEASE_TITLE=NEO PLAYER Alpha 0.3" >> "$GITHUB_ENV"
           fi
 
       - name: Name installable APK

@@ -103,6 +103,16 @@ data class MetadataOverrideEntity(
 @Entity(tableName = "favorite_collections", primaryKeys = ["type", "key"])
 data class FavoriteCollectionEntity(val type: String, val key: String, val addedAt: Long = System.currentTimeMillis())
 
+@Entity(tableName = "track_audio_effects")
+data class TrackAudioEffectsEntity(
+    @PrimaryKey val songId: Long,
+    val preset: String = "Normal",
+    val bass: Int = 0,
+    val virtualizer: Int = 0,
+    val loudnessMb: Int = 0,
+    val bandLevels: String = ""
+)
+
 data class AlbumSummary(val album: String, val artist: String, val albumId: Long, val songCount: Int, val durationMs: Long)
 data class ArtistSummary(val artist: String, val songCount: Int, val albumCount: Int)
 data class GenreSummary(val genre: String, val songCount: Int)

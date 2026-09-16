@@ -39,10 +39,18 @@ class PlaybackConnection(private val context: Context) {
     private var controller: MediaController? = null
     private val _state = MutableStateFlow(PlaybackState())
     private var lastError: String? = null
+    private var crossfadeMs: Long = 0L
+    private var fadeGeneration = 0
+    private var fadingMediaId: String? = null
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = publish(player)
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            fadeGeneration++
+            fadingMediaId = null
+            controller?.volume = 1f
+        }
         override fun onPlayerError(error: PlaybackException) { lastError = error.errorCodeName; controller?.let(::publish) }
     }
 
@@ -80,6 +88,7 @@ class PlaybackConnection(private val context: Context) {
     fun toggleShuffle() { controller?.shuffleModeEnabled = controller?.shuffleModeEnabled != true }
     fun cycleRepeat() { controller?.repeatMode = when (controller?.repeatMode) { Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL; Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE; else -> Player.REPEAT_MODE_OFF } }
     fun setSpeed(speed: Float) = controller?.setPlaybackSpeed(speed)
+    fun setCrossfadeDuration(value: Long) { crossfadeMs = value.coerceIn(0L, 12_000L) }
     fun setSleepTimer(minutes: Int) {
         val generation = ++sleepTimerGeneration
         scope.launch {
@@ -101,6 +110,21 @@ class PlaybackConnection(private val context: Context) {
 
     fun refreshPosition() { controller?.let(::publish) }
     private fun publish(player: Player) {
+        val remaining = (player.duration - player.currentPosition).coerceAtLeast(0L)
+        if (crossfadeMs > 0L && player.isPlaying && player.hasNextMediaItem() && remaining in 1..crossfadeMs && fadingMediaId != player.currentMediaItem?.mediaId) {
+            fadingMediaId = player.currentMediaItem?.mediaId
+            val generation = ++fadeGeneration
+            scope.launch {
+                val steps = 10
+                repeat(steps) { step ->
+                    if (generation != fadeGeneration) return@launch
+                    controller?.volume = 1f - ((step + 1) / steps.toFloat())
+                    delay((crossfadeMs / steps).coerceAtLeast(40L))
+                }
+            }
+        } else if (remaining > crossfadeMs + 500L && fadingMediaId == null) {
+            player.volume = 1f
+        }
         _state.value = PlaybackState(
             connected = true,
             playing = player.isPlaying,

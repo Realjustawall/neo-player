@@ -17,11 +17,11 @@ android {
         applicationId = "com.neoplayer.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-alpha"
+        versionCode = 3
+        versionName = "0.3.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
-        buildConfigField("String", "DISPLAY_VERSION", "\"Alpha 0.2\"")
+        buildConfigField("String", "DISPLAY_VERSION", "\"Alpha 0.3\"")
         buildConfigField("String", "LYRICS_API_BASE", quotedBuildValue(lyricsApiBase))
         buildConfigField("String", "LYRICS_API_KEY", quotedBuildValue(lyricsApiKey))
     }
@@ -64,6 +64,8 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
+    implementation("androidx.paging:paging-runtime:3.3.2")
+    implementation("androidx.paging:paging-compose:3.3.2")
     ksp("androidx.room:room-compiler:2.6.1")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("androidx.media3:media3-exoplayer:1.5.1")
