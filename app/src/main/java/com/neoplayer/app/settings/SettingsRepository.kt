@@ -29,7 +29,7 @@ data class AppSettings(
     val translationEnabled: Boolean = true,
     val romanizationEnabled: Boolean = true,
     val lyricsFontSize: Int = 20,
-    val lyricsAutoScroll: Boolean = true
+    val lyricsAutoScroll: Boolean = true,
     val crossfadeMs: Long = 0L
 )
 
@@ -69,7 +69,7 @@ class SettingsRepository(private val context: Context) {
             translationEnabled = p[Keys.translation] ?: true,
             romanizationEnabled = p[Keys.romanization] ?: true,
             lyricsFontSize = p[Keys.lyricsFontSize] ?: 20,
-            lyricsAutoScroll = p[Keys.lyricsAutoScroll] ?: true
+            lyricsAutoScroll = p[Keys.lyricsAutoScroll] ?: true,
             crossfadeMs = p[Keys.crossfadeMs] ?: 0L
         )
     }
