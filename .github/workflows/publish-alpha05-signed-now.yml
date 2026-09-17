@@ -1,0 +1,72 @@
+name: Publish Signed Alpha 0.5 Now
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'PUBLISH_ALPHA05_SIGNED_NOW_TRIGGER'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-signed-alpha05:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download exact signed candidate from validated build job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          gh api /repos/${GITHUB_REPOSITORY}/actions/artifacts/10516869733/zip > candidate.zip
+          unzip -q candidate.zip -d candidate
+          test -s candidate/NEO-PLAYER-Alpha-0.5-release.apk
+          test -s candidate/NEO-PLAYER-Alpha-0.5-release.aab
+          test -s candidate/RELEASE_ALPHA05_BUILD.txt
+
+      - name: Verify candidate metadata before replacing Release
+        run: |
+          set -Eeuo pipefail
+          grep -q '^TAG=v0.5.0-alpha$' candidate/RELEASE_ALPHA05_BUILD.txt
+          grep -q '^PACKAGE=com.neoplayer.app$' candidate/RELEASE_ALPHA05_BUILD.txt
+          grep -q '^VERSION_CODE=5$' candidate/RELEASE_ALPHA05_BUILD.txt
+          grep -q '^VERSION_NAME=0.5.0-alpha$' candidate/RELEASE_ALPHA05_BUILD.txt
+          grep -q '^APK_SIGNATURE_VERIFIED=true$' candidate/RELEASE_ALPHA05_BUILD.txt
+          grep -q '^ZIPALIGN_16K_VERIFIED=true$' candidate/RELEASE_ALPHA05_BUILD.txt
+          grep -Eq '^SIGNING_MODE=(alpha-test|production)$' candidate/RELEASE_ALPHA05_BUILD.txt
+          APK_BYTES=$(stat -c %s candidate/NEO-PLAYER-Alpha-0.5-release.apk)
+          test "$APK_BYTES" -gt 25039976
+          test "$APK_BYTES" -le 60000000
+          sha256sum candidate/NEO-PLAYER-Alpha-0.5-release.apk candidate/NEO-PLAYER-Alpha-0.5-release.aab | tee candidate/SHA256SUMS.txt
+          cat candidate/RELEASE_ALPHA05_BUILD.txt
+
+      - name: Replace Alpha 0.5 Release assets with signed installable candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          gh release upload v0.5.0-alpha \
+            candidate/NEO-PLAYER-Alpha-0.5-release.apk \
+            candidate/NEO-PLAYER-Alpha-0.5-release.aab \
+            candidate/RELEASE_ALPHA05_BUILD.txt \
+            candidate/SHA256SUMS.txt \
+            --clobber
+          gh release edit v0.5.0-alpha \
+            --title "NEO PLAYER Alpha 0.5" \
+            --latest \
+            --prerelease=false \
+            --notes "Alpha 0.5 from main. The APK currently attached to this Release is the signed installable candidate produced by GitHub Actions after Unit Tests, lintRelease, assembleRelease/bundleRelease, zipalign 16 KiB verification and apksigner verification all passed. Signing mode is recorded in RELEASE_ALPHA05_BUILD.txt. The separate hardware-accelerated emulator install job may still be completing; this asset was published now for direct device testing as explicitly requested. Rollback branch: backup-main-before-alpha0.5-2026-09-17."
+
+      - name: Confirm uploaded Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          gh release view v0.5.0-alpha --json tagName,name,isDraft,isPrerelease,assets,url > release-confirmation.json
+          cat release-confirmation.json
+          grep -q 'NEO-PLAYER-Alpha-0.5-release.apk' release-confirmation.json
+          grep -q 'NEO-PLAYER-Alpha-0.5-release.aab' release-confirmation.json
+          grep -q 'SHA256SUMS.txt' release-confirmation.json
