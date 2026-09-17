@@ -11,19 +11,20 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MusicDao {
-    @Query("SELECT * FROM songs ORDER BY title COLLATE NOCASE") fun songs(): Flow<List<SongEntity>>
-    @Query("SELECT * FROM songs ORDER BY title COLLATE NOCASE") fun songsPaged(): PagingSource<Int, SongEntity>
-    @Query("SELECT * FROM songs WHERE title LIKE '%' || :query || '%' OR artist LIKE '%' || :query || '%' OR album LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%' ORDER BY title COLLATE NOCASE LIMIT 200")
+    @Query("SELECT * FROM songs WHERE NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') ORDER BY title COLLATE NOCASE") fun songs(): Flow<List<SongEntity>>
+    @Query("SELECT * FROM songs ORDER BY title COLLATE NOCASE") fun allSongs(): Flow<List<SongEntity>>
+    @Query("SELECT * FROM songs WHERE NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') ORDER BY title COLLATE NOCASE") fun songsPaged(): PagingSource<Int, SongEntity>
+    @Query("SELECT * FROM songs WHERE NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') AND (title LIKE '%' || :query || '%' OR artist LIKE '%' || :query || '%' OR album LIKE '%' || :query || '%' OR genre LIKE '%' || :query || '%') ORDER BY title COLLATE NOCASE LIMIT 200")
     fun search(query: String): Flow<List<SongEntity>>
     @Query("SELECT * FROM songs WHERE id = :id") suspend fun song(id: Long): SongEntity?
     @Query("SELECT * FROM songs WHERE id IN (:ids)") suspend fun songsByIds(ids: List<Long>): List<SongEntity>
     @Query("SELECT * FROM songs") suspend fun songSnapshot(): List<SongEntity>
-    @Query("SELECT album, artist, albumId, COUNT(*) AS songCount, SUM(durationMs) AS durationMs FROM songs GROUP BY albumId, album ORDER BY album COLLATE NOCASE") fun albums(): Flow<List<AlbumSummary>>
-    @Query("SELECT artist, COUNT(*) AS songCount, COUNT(DISTINCT albumId) AS albumCount FROM songs GROUP BY artist ORDER BY artist COLLATE NOCASE") fun artists(): Flow<List<ArtistSummary>>
-    @Query("SELECT genre, COUNT(*) AS songCount FROM songs WHERE genre != '' GROUP BY genre ORDER BY genre COLLATE NOCASE") fun genres(): Flow<List<GenreSummary>>
-    @Query("SELECT relativePath, COUNT(*) AS songCount FROM songs GROUP BY relativePath ORDER BY relativePath COLLATE NOCASE") fun folders(): Flow<List<FolderSummary>>
-    @Query("SELECT * FROM songs WHERE albumId = :albumId ORDER BY discNumber, trackNumber, title") fun albumSongs(albumId: Long): Flow<List<SongEntity>>
-    @Query("SELECT * FROM songs WHERE artist = :artist ORDER BY album, discNumber, trackNumber") fun artistSongs(artist: String): Flow<List<SongEntity>>
+    @Query("SELECT album, artist, albumId, COUNT(*) AS songCount, SUM(durationMs) AS durationMs FROM songs WHERE NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') GROUP BY albumId, album ORDER BY album COLLATE NOCASE") fun albums(): Flow<List<AlbumSummary>>
+    @Query("SELECT artist, COUNT(*) AS songCount, COUNT(DISTINCT albumId) AS albumCount FROM songs WHERE NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') GROUP BY artist ORDER BY artist COLLATE NOCASE") fun artists(): Flow<List<ArtistSummary>>
+    @Query("SELECT genre, COUNT(*) AS songCount FROM songs WHERE genre != '' AND NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') GROUP BY genre ORDER BY genre COLLATE NOCASE") fun genres(): Flow<List<GenreSummary>>
+    @Query("SELECT relativePath, COUNT(*) AS songCount FROM songs WHERE NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') GROUP BY relativePath ORDER BY relativePath COLLATE NOCASE") fun folders(): Flow<List<FolderSummary>>
+    @Query("SELECT * FROM songs WHERE albumId = :albumId AND NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') ORDER BY discNumber, trackNumber, title") fun albumSongs(albumId: Long): Flow<List<SongEntity>>
+    @Query("SELECT * FROM songs WHERE artist = :artist AND NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') ORDER BY album, discNumber, trackNumber") fun artistSongs(artist: String): Flow<List<SongEntity>>
     @Upsert suspend fun upsertSongs(songs: List<SongEntity>)
     @Query("DELETE FROM songs") suspend fun clearSongs()
     @Query("DELETE FROM songs WHERE id IN (:ids)") suspend fun deleteSongsByIds(ids: List<Long>)
@@ -47,7 +48,7 @@ interface MusicDao {
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_songs WHERE playlistId = :id") suspend fun nextPlaylistPosition(id: Long): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun addPlaylistSong(value: PlaylistSongEntity)
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId") suspend fun removePlaylistSong(playlistId: Long, songId: Long)
-    @Query("SELECT songs.* FROM songs JOIN playlist_songs ON songs.id = playlist_songs.songId WHERE playlist_songs.playlistId = :id ORDER BY playlist_songs.position") fun playlistSongs(id: Long): Flow<List<SongEntity>>
+    @Query("SELECT songs.* FROM songs JOIN playlist_songs ON songs.id = playlist_songs.songId WHERE playlist_songs.playlistId = :id AND NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') ORDER BY playlist_songs.position") fun playlistSongs(id: Long): Flow<List<SongEntity>>
 
     @Query("SELECT * FROM playlist_folders ORDER BY position, createdAt") fun playlistFolders(): Flow<List<PlaylistFolderEntity>>
     @Insert suspend fun createPlaylistFolder(value: PlaylistFolderEntity): Long
@@ -92,7 +93,7 @@ interface MusicDao {
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM category_songs WHERE categoryId = :id") suspend fun nextCategoryPosition(id: Long): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun addCategorySong(value: CategorySongEntity)
     @Query("DELETE FROM category_songs WHERE categoryId = :categoryId AND songId = :songId") suspend fun removeCategorySong(categoryId: Long, songId: Long)
-    @Query("SELECT songs.* FROM songs JOIN category_songs ON songs.id = category_songs.songId WHERE category_songs.categoryId = :id ORDER BY category_songs.position") fun categorySongs(id: Long): Flow<List<SongEntity>>
+    @Query("SELECT songs.* FROM songs JOIN category_songs ON songs.id = category_songs.songId WHERE category_songs.categoryId = :id AND NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') ORDER BY category_songs.position") fun categorySongs(id: Long): Flow<List<SongEntity>>
 
     @Query("SELECT * FROM lyrics WHERE songId = :songId") fun lyrics(songId: Long): Flow<LyricsEntity?>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveLyrics(value: LyricsEntity)
