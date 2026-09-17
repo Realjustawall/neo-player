@@ -1,0 +1,97 @@
+name: Alpha 0.5 Release Build Final
+
+on:
+  push:
+    branches: ['alpha0.5']
+    paths-ignore:
+      - 'ALPHA05_BUILD_RESULT.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: alpha05-release-final-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Check out alpha0.5
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require complete additive source
+        run: test -f ALPHA05_APPLIED.md
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Test and lint
+        run: gradle --no-daemon testDebugUnitTest lintRelease
+
+      - name: Assemble Release APK and AAB
+        run: gradle --no-daemon assembleRelease bundleRelease
+
+      - name: Measure exact outputs
+        id: sizes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          APK="$(find app/build/outputs/apk/release -type f -name '*.apk' | head -1)"
+          AAB="$(find app/build/outputs/bundle/release -type f -name '*.aab' | head -1)"
+          test -f "$APK"
+          test -f "$AAB"
+          APK_BYTES="$(stat -c %s "$APK")"
+          AAB_BYTES="$(stat -c %s "$AAB")"
+          APK_MIB="$(awk -v b="$APK_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
+          AAB_MIB="$(awk -v b="$AAB_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
+          printf 'BRANCH=alpha0.5\nBUILD_SHA=%s\nAPK_BYTES=%s\nAPK_MIB=%s\nAAB_BYTES=%s\nAAB_MIB=%s\n' \
+            "$GITHUB_SHA" "$APK_BYTES" "$APK_MIB" "$AAB_BYTES" "$AAB_MIB" > ALPHA05_BUILD_RESULT.txt
+          echo "apk_path=$APK" >> "$GITHUB_OUTPUT"
+          echo "aab_path=$AAB" >> "$GITHUB_OUTPUT"
+          cat ALPHA05_BUILD_RESULT.txt
+          ls -lh "$APK" "$AAB"
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEO-PLAYER-alpha0.5-release-apk
+          path: ${{ steps.sizes.outputs.apk_path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEO-PLAYER-alpha0.5-release-aab
+          path: ${{ steps.sizes.outputs.aab_path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Persist exact build result on alpha0.5
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ALPHA05_BUILD_RESULT.txt
+          git commit -m 'ci: record alpha0.5 release binary sizes [skip ci]'
+          git push origin HEAD:alpha0.5
