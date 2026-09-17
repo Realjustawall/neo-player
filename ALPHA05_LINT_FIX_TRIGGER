@@ -1,0 +1,3 @@
+fix=TrackExperienceApp_VisualTrackTab_scoped_androidx_annotation_OptIn
+source_before_fix=67e82fafffe35749987036cfe701d9f8779b0309
+no_feature_deletion=true
