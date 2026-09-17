@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.Locale
 
 class MusicRepository(
@@ -22,6 +24,7 @@ class MusicRepository(
     private val searchCache = object : LinkedHashMap<String, CachedSearch>(32, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedSearch>?) = size > 32
     }
+    private val rescanMutex = Mutex()
 
     val songs = dao.songs()
     val songsPaged = Pager(PagingConfig(pageSize = 80, prefetchDistance = 24, enablePlaceholders = false)) { dao.songsPaged() }.flow
@@ -56,7 +59,7 @@ class MusicRepository(
         }
     }
 
-    suspend fun rescan(minDurationMs: Long = 10_000): Int {
+    suspend fun rescan(minDurationMs: Long = 10_000): Int = rescanMutex.withLock {
         val excluded = dao.excludedFolders().first().map(::normalizeFolder).filter(String::isNotBlank).toSet()
         val overrides = dao.metadataOverrides().associateBy { it.songId }
         val scanned = scanner.scan(minDurationMs)
@@ -77,7 +80,7 @@ class MusicRepository(
 
         dao.replaceLibrary(scanned)
         synchronized(searchCache) { searchCache.clear() }
-        return scanned.size
+        scanned.size
     }
 
     suspend fun toggleFavorite(id: Long) = if (dao.isFavorite(id)) dao.removeFavorite(id) else dao.addFavorite(FavoriteEntity(id))
