@@ -24,7 +24,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Require complete additive source
+      - name: Require complete Alpha 0.5 source
         run: test -f ALPHA05_APPLIED.md
 
       - name: Set up JDK 17
@@ -33,20 +33,27 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK 36
+      - name: Install Android SDK 35
+        shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          set -Eeuo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
-      - name: Set up Gradle 8.13
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.13'
+          gradle-version: '8.9'
 
-      - name: Test and lint
+      - name: Verify build environment
+        run: |
+          java -version
+          gradle --version
+          test -d "$ANDROID_HOME/platforms/android-35"
+
+      - name: Test and lint Release
         run: gradle --no-daemon testDebugUnitTest lintRelease
 
       - name: Assemble Release APK and AAB
@@ -93,5 +100,9 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add ALPHA05_BUILD_RESULT.txt
-          git commit -m 'ci: record alpha0.5 release binary sizes [skip ci]'
-          git push origin HEAD:alpha0.5
+          if git diff --cached --quiet; then
+            echo 'Build result unchanged.'
+          else
+            git commit -m 'ci: record alpha0.5 release binary sizes [skip ci]'
+            git push origin HEAD:alpha0.5
+          fi
