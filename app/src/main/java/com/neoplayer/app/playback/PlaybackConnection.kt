@@ -60,6 +60,7 @@ class PlaybackConnection(private val context: Context) {
     private var crossfadeMs: Long = 0L
     private var fadeGeneration = 0
     private var fadingMediaId: String? = null
+    private var outputVolumeScale = 1f
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
 
     private val listener = object : Player.Listener {
@@ -96,6 +97,7 @@ class PlaybackConnection(private val context: Context) {
                     reconnectAttempt = 0
                     controller = mediaController
                     mediaController.addListener(listener)
+                    mediaController.volume = outputVolumeScale
                     publish(mediaController, rebuildQueue = true)
                 }
                 .onFailure { error ->
@@ -185,6 +187,12 @@ class PlaybackConnection(private val context: Context) {
 
     fun setSpeed(speed: Float) = controller?.setPlaybackSpeed(speed.coerceIn(0.25f, 3f))
 
+    /** Baseline volume used by normalization. Timers and fades multiply this value instead of overwriting it. */
+    fun setOutputVolumeScale(scale: Float) {
+        outputVolumeScale = scale.coerceIn(0.05f, 1f)
+        if (fadingMediaId == null) controller?.volume = outputVolumeScale
+    }
+
     fun setCrossfadeDuration(value: Long) {
         crossfadeMs = value.coerceIn(0L, 12_000L)
         if (crossfadeMs == 0L) cancelFade(restoreVolume = true)
@@ -197,12 +205,12 @@ class PlaybackConnection(private val context: Context) {
             delay((total - 5_000L).coerceAtLeast(0L))
             repeat(5) { step ->
                 if (generation != sleepTimerGeneration) return@launch
-                controller?.volume = 1f - ((step + 1) / 5f)
+                controller?.volume = outputVolumeScale * (1f - ((step + 1) / 5f))
                 delay(1_000L)
             }
             if (generation == sleepTimerGeneration) {
                 controller?.pause()
-                controller?.volume = 1f
+                controller?.volume = outputVolumeScale
             }
         }
     }
@@ -240,7 +248,7 @@ class PlaybackConnection(private val context: Context) {
 
     fun cancelSleepTimer() {
         sleepTimerGeneration++
-        controller?.volume = 1f
+        controller?.volume = outputVolumeScale
     }
 
     /** Cheap high-frequency update used by the progress UI. */
@@ -314,7 +322,7 @@ class PlaybackConnection(private val context: Context) {
             val stepDelay = (crossfadeMs / steps).coerceAtLeast(40L)
             repeat(steps) { step ->
                 if (generation != fadeGeneration || fadingMediaId != mediaId) return@launch
-                controller?.volume = 1f - ((step + 1) / steps.toFloat())
+                controller?.volume = outputVolumeScale * (1f - ((step + 1) / steps.toFloat()))
                 delay(stepDelay)
             }
         }
@@ -323,7 +331,7 @@ class PlaybackConnection(private val context: Context) {
     private fun cancelFade(restoreVolume: Boolean) {
         fadeGeneration++
         fadingMediaId = null
-        if (restoreVolume) controller?.volume = 1f
+        if (restoreVolume) controller?.volume = outputVolumeScale
     }
 
     private fun safeDuration(player: Player): Long = player.duration.takeIf { it != C.TIME_UNSET && it > 0L } ?: 0L
