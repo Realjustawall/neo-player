@@ -74,13 +74,6 @@ jobs:
           replace_once(ui, 'tx(fa, "Built-in Persian model", "مدل فارسی داخلی")', 'tx(fa, "Persian offline pack", "بسته آفلاین فارسی")')
           replace_once(ui, 'tx(fa, "Built-in English • ~40 MB model", "انگلیسی داخلی • مدل حدود ۴۰ مگابایت")', 'tx(fa, "English offline pack • ~40 MB one-time", "بسته آفلاین انگلیسی • حدود ۴۰ مگابایت یک‌بار")')
           replace_once(ui, 'tx(fa, "Built-in Persian • ~53 MB model", "فارسی داخلی • مدل حدود ۵۳ مگابایت")', 'tx(fa, "Persian offline pack • ~53 MB one-time", "بسته آفلاین فارسی • حدود ۵۳ مگابایت یک‌بار")')
-
-          workflow = '.github/workflows/alpha05-release-final.yml'
-          replace_once(
-              workflow,
-              '          PREVIOUS_APK_BYTES=25039976\n          if [ "$APK_BYTES" -le "$PREVIOUS_APK_BYTES" ]; then\n            echo "ERROR: additive Alpha 0.5 APK must be larger than previous APK ($PREVIOUS_APK_BYTES bytes); got $APK_BYTES" >&2\n            exit 1\n          fi\n          printf \'BRANCH=alpha0.5\\nBUILD_SHA=%s\\nPREVIOUS_APK_BYTES=%s\\nAPK_BYTES=%s\\nAPK_MIB=%s\\nAAB_BYTES=%s\\nAAB_MIB=%s\\nSIZE_FLOOR=PASS\\n\' \\\n            "$GITHUB_SHA" "$PREVIOUS_APK_BYTES" "$APK_BYTES" "$APK_MIB" "$AAB_BYTES" "$AAB_MIB" > ALPHA05_BUILD_RESULT.txt\n',
-              '          PREVIOUS_APK_BYTES=25039976\n          MAX_REASONABLE_APK_BYTES=60000000\n          if [ "$APK_BYTES" -le "$PREVIOUS_APK_BYTES" ]; then\n            echo "ERROR: additive Alpha 0.5 APK must be larger than previous APK ($PREVIOUS_APK_BYTES bytes); got $APK_BYTES" >&2\n            exit 1\n          fi\n          if [ "$APK_BYTES" -gt "$MAX_REASONABLE_APK_BYTES" ]; then\n            echo "ERROR: optimized Alpha 0.5 APK should stay at or below $MAX_REASONABLE_APK_BYTES bytes; got $APK_BYTES" >&2\n            exit 1\n          fi\n          printf \'BRANCH=alpha0.5\\nBUILD_SHA=%s\\nPREVIOUS_APK_BYTES=%s\\nMAX_REASONABLE_APK_BYTES=%s\\nAPK_BYTES=%s\\nAPK_MIB=%s\\nAAB_BYTES=%s\\nAAB_MIB=%s\\nSIZE_FLOOR=PASS\\nSIZE_CEILING=PASS\\n\' \\\n            "$GITHUB_SHA" "$PREVIOUS_APK_BYTES" "$MAX_REASONABLE_APK_BYTES" "$APK_BYTES" "$APK_MIB" "$AAB_BYTES" "$AAB_MIB" > ALPHA05_BUILD_RESULT.txt\n'
-          )
           PY
 
       - name: Verify additive source and zero tracked deletions
@@ -104,7 +97,6 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app/src/main/java/com/neoplayer/app/lyrics/OfflineLyricsTranscriber.kt \
                   app/src/main/java/com/neoplayer/app/ui/TrackExperienceViewModel.kt \
-                  app/src/main/java/com/neoplayer/app/ui/TrackExperienceApp.kt \
-                  .github/workflows/alpha05-release-final.yml
+                  app/src/main/java/com/neoplayer/app/ui/TrackExperienceApp.kt
           git commit -m 'feat: keep offline AI lyrics with on-demand verified model packs'
           git push origin HEAD:alpha0.5
