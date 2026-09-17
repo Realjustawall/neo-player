@@ -61,6 +61,8 @@ class PlaybackConnection(private val context: Context) {
     private var fadeGeneration = 0
     private var fadingMediaId: String? = null
     private var outputVolumeScale = 1f
+    /** The service owns the real dual-decoder mix. The client fade remains as a retained fallback. */
+    private val serviceManagedCrossfade = true
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
 
     private val listener = object : Player.Listener {
@@ -308,7 +310,9 @@ class PlaybackConnection(private val context: Context) {
         }
     }
 
+    /** Retained codec-safe fallback for environments where service-side mixing is disabled. */
     private fun maybeStartFade(player: Player) {
+        if (serviceManagedCrossfade) return
         val duration = safeDuration(player)
         if (duration <= 0L || crossfadeMs <= 0L || !player.isPlaying || !player.hasNextMediaItem()) return
         val remaining = (duration - player.currentPosition).coerceAtLeast(0L)
