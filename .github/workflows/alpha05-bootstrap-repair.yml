@@ -1,0 +1,135 @@
+name: Alpha 0.5 Verified Runtime Repair
+
+on:
+  push:
+    branches: ['alpha0.5']
+    paths:
+      - 'ALPHA05_REPAIR_READY'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: alpha05-runtime-repair
+  cancel-in-progress: false
+
+jobs:
+  repair-and-apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out alpha0.5
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select exact part04 and reconstruct runtime ZIP
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          EXPECTED_PART04='5af312218b512e594e99673eb783d8aa50ef99894ae6c1f0a282c9c6fd552948'
+          EXPECTED_ZIP='489b45421fc9ac26fcdc0dbceae986aaa84a5c89d2624bced35ee45601d71340'
+          FIX=''
+          for f in .alpha05/runtime_parts/part04.b64 .alpha05/runtime_parts/fix04a.b64 .alpha05/runtime_parts/fix04b.b64 .alpha05/runtime_parts/fix04c.b64 .alpha05/runtime_parts/fix04d.b64; do
+            test -f "$f" || continue
+            SIZE="$(stat -c %s "$f")"
+            HASH="$(sha256sum "$f" | awk '{print $1}')"
+            echo "$f size=$SIZE sha256=$HASH"
+            if [ "$SIZE" -eq 12000 ] && [ "$HASH" = "$EXPECTED_PART04" ]; then
+              FIX="$f"
+            fi
+          done
+          test -n "$FIX"
+          echo "Verified replacement: $FIX"
+          {
+            cat .alpha05/runtime_parts/part00.b64
+            cat .alpha05/runtime_parts/part01.b64
+            cat .alpha05/runtime_parts/part02.b64
+            cat .alpha05/runtime_parts/part03.b64
+            cat "$FIX"
+            cat .alpha05/runtime_parts/part05.b64
+            cat .alpha05/runtime_parts/part06.b64
+            cat .alpha05/runtime_parts/part07.b64
+            cat .alpha05/runtime_parts/part08.b64
+            cat .alpha05/runtime_parts/part09.b64
+            cat .alpha05/runtime_parts/part10.b64
+            cat .alpha05/runtime_parts/part11.b64
+          } | base64 -d > /tmp/alpha05-runtime.zip
+          echo "$EXPECTED_ZIP  /tmp/alpha05-runtime.zip" | sha256sum -c -
+          test "$(stat -c %s /tmp/alpha05-runtime.zip)" -eq 106575
+          unzip -t /tmp/alpha05-runtime.zip
+
+      - name: Apply verified runtime overlay additively
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          unzip -o /tmp/alpha05-runtime.zip -d "$GITHUB_WORKSPACE"
+
+      - name: Brand Alpha 0.5
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('app/build.gradle.kts')
+          s = p.read_text()
+          s = re.sub(r'versionCode\s*=\s*\d+', 'versionCode = 5', s, count=1)
+          s = re.sub(r'versionName\s*=\s*"[^"]+"', 'versionName = "0.5.0-alpha"', s, count=1)
+          s = re.sub(r'buildConfigField\("String",\s*"DISPLAY_VERSION",\s*"\\"[^\"]*\\""\)', 'buildConfigField("String", "DISPLAY_VERSION", "\\"Alpha 0.5\\"")', s, count=1)
+          p.write_text(s)
+          PY
+          cat > ALPHA05_APPLIED.md <<'EOF'
+          # NEO Player Alpha 0.5
+
+          Full additive Alpha 0.5 source is applied on top of base 7717f88f64e88008cc31f25b99dbbcee32fa70ea.
+          Runtime ZIP SHA-256: 489b45421fc9ac26fcdc0dbceae986aaa84a5c89d2624bced35ee45601d71340
+          Runtime ZIP size: 106575 bytes.
+          No tracked-file deletion is permitted.
+          EOF
+
+      - name: Require additive feature set
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for f in \
+            app/src/main/java/com/neoplayer/app/analysis/AdvancedAudioAnalyzer.kt \
+            app/src/main/java/com/neoplayer/app/analysis/ReplayGainScanner.kt \
+            app/src/main/java/com/neoplayer/app/domain/OfflineBackupEngine.kt \
+            app/src/main/java/com/neoplayer/app/domain/LocalRecommendationEngine.kt \
+            app/src/main/java/com/neoplayer/app/visual/LocalSpectrumAnalyzer.kt \
+            app/src/main/java/com/neoplayer/app/visual/LocalCanvasVideo.kt \
+            app/src/main/java/com/neoplayer/app/lyrics/OfflineLyricsTranscriber.kt \
+            app/src/main/java/com/neoplayer/app/lyrics/LyricsForcedAligner.kt \
+            app/src/main/java/com/neoplayer/app/ui/NeoOfflineProApp.kt; do
+              test -f "$f"
+          done
+
+      - name: Refuse tracked-file deletion
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git add -A
+          DELETED="$(git diff --cached --name-status | awk '$1 ~ /^D/ {print}')"
+          if [ -n "$DELETED" ]; then
+            echo 'Refusing commit because tracked files would be deleted:' >&2
+            printf '%s\n' "$DELETED" >&2
+            exit 1
+          fi
+          echo 'Deletion guard: PASS (0 tracked files deleted)'
+
+      - name: Commit verified Alpha 0.5 runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git status --short
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit.'
+          else
+            git commit -m 'feat: apply verified additive Alpha 0.5 runtime [alpha05-applied]'
+            git push origin HEAD:alpha0.5
+          fi
