@@ -4,8 +4,7 @@ on:
   push:
     branches: ['alpha0.5']
     paths:
-      - '.github/workflows/alpha05-bootstrap.yml'
-      - 'ALPHA05_BOOTSTRAP_TRIGGER'
+      - 'ALPHA05_LOCAL_OVERLAY_TRIGGER'
   workflow_dispatch:
 
 permissions:
@@ -25,11 +24,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download verified additive overlay
+      - name: Reconstruct and verify in-branch additive overlay
+        shell: bash
         run: |
-          curl -fL --retry 4 --retry-delay 2 \
-            'https://filebin.net/neo_alpha05_20260917_9f4c2a/neo-player-offline-pro-release-v2.zip' \
-            -o /tmp/alpha05-overlay.zip
+          set -Eeuo pipefail
+          test -f .alpha05/overlay-v2.b64
+          base64 -d .alpha05/overlay-v2.b64 > /tmp/alpha05-overlay.zip
+          echo '505165e5b68c2e4629217f2d58855cbc2df7c31567742b60239a6995e655d3d6  /tmp/alpha05-overlay.zip' | sha256sum -c -
           unzip -t /tmp/alpha05-overlay.zip
           rm -rf /tmp/alpha05-overlay
           mkdir -p /tmp/alpha05-overlay
@@ -39,75 +40,51 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          APPLIED=0
-          for script in \
-            /tmp/alpha05-overlay/apply_overlay.py \
-            /tmp/alpha05-overlay/apply.py \
-            /tmp/alpha05-overlay/tools/apply_overlay.py \
-            /tmp/alpha05-overlay/scripts/apply_overlay.py; do
-            if [ -f "$script" ]; then
-              if python3 "$script" --target "$GITHUB_WORKSPACE" --apply || \
-                 python3 "$script" "$GITHUB_WORKSPACE" --apply || \
-                 python3 "$script" --apply "$GITHUB_WORKSPACE"; then
-                APPLIED=1
-                break
-              fi
-            fi
-          done
-          if [ "$APPLIED" -eq 0 ]; then
-            for script in /tmp/alpha05-overlay/apply_overlay.sh /tmp/alpha05-overlay/apply.sh; do
-              if [ -f "$script" ]; then
-                chmod +x "$script"
-                if "$script" "$GITHUB_WORKSPACE"; then
-                  APPLIED=1
-                  break
-                fi
-              fi
-            done
+          SCRIPT='/tmp/alpha05-overlay/neo-player-offline-upgrade-overlay/apply_overlay.py'
+          if [ ! -f "$SCRIPT" ]; then
+            SCRIPT="$(find /tmp/alpha05-overlay -name apply_overlay.py -type f | head -1)"
           fi
-          if [ "$APPLIED" -eq 0 ]; then
-            SRC=''
-            for cand in /tmp/alpha05-overlay/overlay /tmp/alpha05-overlay/files /tmp/alpha05-overlay/project /tmp/alpha05-overlay/repo; do
-              if [ -d "$cand" ]; then SRC="$cand"; break; fi
-            done
-            if [ -n "$SRC" ]; then
-              cp -a "$SRC"/. "$GITHUB_WORKSPACE"/
-              APPLIED=1
-            fi
-          fi
-          test "$APPLIED" -eq 1
+          test -f "$SCRIPT"
+          python3 "$SCRIPT" --target "$GITHUB_WORKSPACE" --apply --allow-different-head
 
       - name: Brand branch as Alpha 0.5
+        shell: bash
         run: |
+          set -Eeuo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p=Path('app/build.gradle.kts')
-          if p.exists():
-              s=p.read_text()
-              import re
-              s=re.sub(r'versionCode\s*=\s*\d+', 'versionCode = 5', s, count=1)
-              s=re.sub(r'versionName\s*=\s*"[^"]+"', 'versionName = "0.5.0-alpha"', s, count=1)
-              s=re.sub(r'buildConfigField\("String",\s*"DISPLAY_VERSION",\s*"\\"[^\"]*\\""\)', 'buildConfigField("String", "DISPLAY_VERSION", "\\"Alpha 0.5\\"")', s, count=1)
-              p.write_text(s)
+          s=p.read_text()
+          s=re.sub(r'versionCode\s*=\s*\d+', 'versionCode = 5', s, count=1)
+          s=re.sub(r'versionName\s*=\s*"[^"]+"', 'versionName = "0.5.0-alpha"', s, count=1)
+          s=re.sub(r'buildConfigField\("String",\s*"DISPLAY_VERSION",\s*"\\"[^\"]*\\""\)', 'buildConfigField("String", "DISPLAY_VERSION", "\\"Alpha 0.5\\"")', s, count=1)
+          p.write_text(s)
           PY
           cat > ALPHA05_APPLIED.md <<'EOF'
           # NEO Player Alpha 0.5
 
-          Isolated additive build line based on `fix/stability-performance-hardening` plus the Offline Pro/Track+ overlay.
-          `main` is not modified. Existing user-facing features are retained; this branch only adds or hardens capabilities.
+          Full additive Alpha 0.5 source: all pre-existing branch capabilities plus the Offline Pro/Track+ overlay.
+          The overlay is stored and SHA-256 verified inside this branch. No tracked source file may be deleted by bootstrap.
           EOF
 
-      - name: Refuse any source deletion
+      - name: Refuse any tracked-file deletion
+        shell: bash
         run: |
+          set -Eeuo pipefail
           git add -A
-          if git diff --cached --name-status | awk '$1 ~ /^D/ { bad=1 } END { exit bad ? 0 : 1 }'; then
-            echo 'Refusing Alpha 0.5 bootstrap because a tracked file would be deleted:' >&2
-            git diff --cached --name-status | awk '$1 ~ /^D/' >&2
+          DELETED="$(git diff --cached --name-status | awk '$1 ~ /^D/ {print}')"
+          if [ -n "$DELETED" ]; then
+            echo 'Refusing Alpha 0.5 bootstrap because tracked files would be deleted:' >&2
+            printf '%s\n' "$DELETED" >&2
             exit 1
           fi
+          echo 'Deletion guard: PASS (0 tracked files deleted)'
 
       - name: Commit complete Alpha 0.5 source
+        shell: bash
         run: |
+          set -Eeuo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
@@ -115,6 +92,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No new source changes to commit.'
           else
-            git commit -m 'feat: apply additive Alpha 0.5 Offline Pro source [alpha05-applied]'
+            git commit -m 'feat: apply complete additive Alpha 0.5 Offline Pro source [alpha05-applied]'
             git push origin HEAD:alpha0.5
           fi
