@@ -1,0 +1,75 @@
+name: Alpha 0.5 Final Lint Fix
+
+on:
+  push:
+    branches: ['alpha0.5']
+    paths:
+      - 'ALPHA05_LINT_FIX_TRIGGER'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: alpha05-lint-fix
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out alpha0.5
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply scoped Media3 call-site opt-in
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('app/src/main/java/com/neoplayer/app/ui/TrackExperienceApp.kt')
+          s = p.read_text()
+          import_anchor = 'import androidx.lifecycle.compose.collectAsStateWithLifecycle\n'
+          unstable_import = 'import androidx.media3.common.util.UnstableApi\n'
+          if unstable_import not in s:
+              if import_anchor in s:
+                  s = s.replace(import_anchor, import_anchor + unstable_import, 1)
+              else:
+                  # Keep the change additive even if imports were reordered.
+                  package_end = s.find('\n\n', s.find('package '))
+                  s = s[:package_end+2] + unstable_import + s[package_end+2:]
+
+          target = '@Composable\nprivate fun VisualTrackTab(vm: TrackExperienceViewModel, fa: Boolean) {'
+          replacement = '@androidx.annotation.OptIn(UnstableApi::class)\n@Composable\nprivate fun VisualTrackTab(vm: TrackExperienceViewModel, fa: Boolean) {'
+          if target in s:
+              s = s.replace(target, replacement, 1)
+          elif replacement not in s:
+              raise SystemExit('VisualTrackTab opt-in target not found')
+          p.write_text(s)
+          PY
+
+      - name: Verify no tracked file deletion
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git add -A
+          if git diff --cached --name-status | awk '$1 ~ /^D/ {bad=1} END {exit bad ? 0 : 1}'; then
+            echo 'Refusing lint fix because it would delete a tracked file.' >&2
+            git diff --cached --name-status | awk '$1 ~ /^D/' >&2
+            exit 1
+          fi
+          git diff --cached --check
+
+      - name: Commit lint fix
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/neoplayer/app/ui/TrackExperienceApp.kt
+          git diff --cached --stat
+          git commit -m 'fix: opt in Track Experience Canvas call site to Media3 unstable API'
+          git push origin HEAD:alpha0.5
