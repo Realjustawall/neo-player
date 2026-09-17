@@ -1,15 +1,13 @@
-name: Alpha 0.5 Release Build
+name: Alpha 0.5 Release Build (Manual)
 
 on:
-  push:
-    branches: ['alpha0.5']
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: alpha05-release-${{ github.ref }}
+  group: alpha05-release-manual-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -20,7 +18,7 @@ jobs:
       - name: Check out alpha0.5
         uses: actions/checkout@v4
 
-      - name: Require complete additive source
+      - name: Require complete Alpha 0.5 source
         run: |
           test -f ALPHA05_APPLIED.md
           echo "Building commit $GITHUB_SHA"
@@ -31,18 +29,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK 36
+      - name: Install Android SDK 35
+        shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+          set -Eeuo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
-      - name: Set up Gradle 8.13
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.13'
+          gradle-version: '8.9'
 
       - name: Unit tests and release lint
         run: gradle --no-daemon testDebugUnitTest lintRelease
@@ -60,8 +59,6 @@ jobs:
           AAB_BYTES="$(stat -c %s "$AAB")"
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
           echo "AAB_PATH=$AAB" >> "$GITHUB_ENV"
-          echo "APK_BYTES=$APK_BYTES" >> "$GITHUB_ENV"
-          echo "AAB_BYTES=$AAB_BYTES" >> "$GITHUB_ENV"
           printf 'APK_BYTES=%s\nAAB_BYTES=%s\n' "$APK_BYTES" "$AAB_BYTES" | tee alpha05-build-sizes.txt
           ls -lh "$APK" "$AAB"
 
