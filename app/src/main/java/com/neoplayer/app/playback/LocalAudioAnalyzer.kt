@@ -7,6 +7,7 @@ import android.media.MediaFormat
 import android.net.Uri
 import com.neoplayer.app.data.AudioAnalysisEntity
 import com.neoplayer.app.data.SongEntity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -29,7 +30,11 @@ import kotlin.math.sqrt
 class LocalAudioAnalyzer(private val context: Context) {
     suspend fun analyze(song: SongEntity, targetLufs: Float = DEFAULT_TARGET_LUFS): AudioAnalysisEntity =
         withContext(Dispatchers.IO) {
-            runCatching { decode(song, targetLufs) }.getOrElse {
+            try {
+                decode(song, targetLufs)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
                 AudioAnalysisEntity(songId = song.id, integratedLufs = targetLufs, peakDb = 0f, bpm = 0f, gainMb = 0)
             }
         }
