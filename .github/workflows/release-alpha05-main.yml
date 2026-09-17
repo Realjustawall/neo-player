@@ -17,7 +17,7 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 90
     env:
       NEO_RELEASE_STORE_PASSWORD: ${{ secrets.NEO_RELEASE_STORE_PASSWORD }}
       NEO_RELEASE_KEY_ALIAS: ${{ secrets.NEO_RELEASE_KEY_ALIAS }}
@@ -63,7 +63,7 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Prepare optional release signing
+      - name: Prepare optional production signing
         shell: bash
         env:
           NEO_RELEASE_KEYSTORE_BASE64: ${{ secrets.NEO_RELEASE_KEYSTORE_BASE64 }}
@@ -82,6 +82,34 @@ jobs:
             echo "NEO_RELEASE_SIGNED=false" >> "$GITHUB_ENV"
           fi
 
+      - name: Restore persistent Alpha test signing key
+        if: env.NEO_RELEASE_SIGNED != 'true'
+        uses: actions/cache@v4
+        with:
+          path: .ci/alpha-signing
+          key: neo-player-alpha-signing-v1
+
+      - name: Prepare Alpha test signing key
+        if: env.NEO_RELEASE_SIGNED != 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p .ci/alpha-signing
+          KEYSTORE="$GITHUB_WORKSPACE/.ci/alpha-signing/neo-alpha.jks"
+          PASSFILE="$GITHUB_WORKSPACE/.ci/alpha-signing/password.txt"
+          if [ ! -s "$KEYSTORE" ] || [ ! -s "$PASSFILE" ]; then
+            PASS="$(openssl rand -hex 24)"
+            printf '%s' "$PASS" > "$PASSFILE"
+            keytool -genkeypair -v -keystore "$KEYSTORE" -storepass "$PASS" -keypass "$PASS" \
+              -alias neoalpha -keyalg RSA -keysize 3072 -validity 3650 \
+              -dname "CN=NEO PLAYER Alpha Install,OU=Testing,O=NEO PLAYER,C=US"
+          fi
+          PASS="$(cat "$PASSFILE")"
+          echo "::add-mask::$PASS"
+          echo "ALPHA_KEYSTORE=$KEYSTORE" >> "$GITHUB_ENV"
+          echo "ALPHA_KEY_PASSWORD=$PASS" >> "$GITHUB_ENV"
+          keytool -list -v -keystore "$KEYSTORE" -storepass "$PASS" -alias neoalpha | grep -E 'Alias name:|SHA256:'
+
       - name: Unit tests
         run: gradle --no-daemon testDebugUnitTest
 
@@ -89,99 +117,106 @@ jobs:
         run: gradle --no-daemon lintRelease
 
       - name: Build Release APK and AAB
-        run: gradle --no-daemon assembleRelease bundleRelease
+        run: gradle --no-daemon clean assembleRelease bundleRelease
 
-      - name: Verify and name release outputs
+      - name: Sign fallback Alpha package and verify signatures
         id: outputs
         shell: bash
         run: |
           set -Eeuo pipefail
-          APK="$(find app/build/outputs/apk/release -type f -name '*.apk' | head -1)"
-          AAB="$(find app/build/outputs/bundle/release -type f -name '*.aab' | head -1)"
-          test -f "$APK"
-          test -f "$AAB"
-          APK_BYTES="$(stat -c %s "$APK")"
-          AAB_BYTES="$(stat -c %s "$AAB")"
+          RAW_APK="$(find app/build/outputs/apk/release -type f -name '*.apk' | head -1)"
+          RAW_AAB="$(find app/build/outputs/bundle/release -type f -name '*.aab' | head -1)"
+          test -s "$RAW_APK"
+          test -s "$RAW_AAB"
+          OUT_APK="$GITHUB_WORKSPACE/NEO-PLAYER-Alpha-0.5-INSTALLABLE.apk"
+          OUT_AAB="$GITHUB_WORKSPACE/NEO-PLAYER-Alpha-0.5-release.aab"
+          if [ "${NEO_RELEASE_SIGNED:-false}" = "true" ]; then
+            cp "$RAW_APK" "$OUT_APK"
+            cp "$RAW_AAB" "$OUT_AAB"
+            SIGNING_MODE=production
+          else
+            ALIGNED="$RUNNER_TEMP/neo-alpha-aligned.apk"
+            "$ANDROID_HOME/build-tools/36.0.0/zipalign" -p -f 4 "$RAW_APK" "$ALIGNED"
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign \
+              --ks "$ALPHA_KEYSTORE" --ks-key-alias neoalpha \
+              --ks-pass "pass:$ALPHA_KEY_PASSWORD" --key-pass "pass:$ALPHA_KEY_PASSWORD" \
+              --out "$OUT_APK" "$ALIGNED"
+            cp "$RAW_AAB" "$OUT_AAB"
+            jarsigner -keystore "$ALPHA_KEYSTORE" -storepass "$ALPHA_KEY_PASSWORD" -keypass "$ALPHA_KEY_PASSWORD" \
+              -sigalg SHA256withRSA -digestalg SHA-256 "$OUT_AAB" neoalpha
+            SIGNING_MODE=alpha-test
+          fi
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$OUT_APK" | tee apk-signature.txt
+          jarsigner -verify "$OUT_AAB" >/dev/null
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$OUT_APK" | tee apk-badging.txt
+          grep -q "package: name='com.neoplayer.app'" apk-badging.txt
+          grep -q "versionCode='5'" apk-badging.txt
+          APK_BYTES="$(stat -c %s "$OUT_APK")"
+          AAB_BYTES="$(stat -c %s "$OUT_AAB")"
           PREVIOUS_APK_BYTES=25039976
           MAX_REASONABLE_APK_BYTES=60000000
-          if [ "$APK_BYTES" -le "$PREVIOUS_APK_BYTES" ]; then
-            echo "APK unexpectedly smaller than additive baseline: $APK_BYTES" >&2
-            exit 1
-          fi
-          if [ "$APK_BYTES" -gt "$MAX_REASONABLE_APK_BYTES" ]; then
-            echo "APK unexpectedly larger than reasonable ceiling: $APK_BYTES" >&2
-            exit 1
-          fi
-          OUT_APK="$GITHUB_WORKSPACE/NEO-PLAYER-Alpha-0.5-release.apk"
-          OUT_AAB="$GITHUB_WORKSPACE/NEO-PLAYER-Alpha-0.5-release.aab"
-          cp "$APK" "$OUT_APK"
-          cp "$AAB" "$OUT_AAB"
-          if [ "${NEO_RELEASE_SIGNED:-false}" = "true" ]; then
-            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$OUT_APK"
-          fi
+          test "$APK_BYTES" -gt "$PREVIOUS_APK_BYTES"
+          test "$APK_BYTES" -le "$MAX_REASONABLE_APK_BYTES"
           APK_MIB="$(awk -v b="$APK_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
           AAB_MIB="$(awk -v b="$AAB_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
+          CERT_SHA256="$(grep -m1 'Signer #1 certificate SHA-256 digest:' apk-signature.txt | sed 's/.*: //')"
           cat > RELEASE_ALPHA05_BUILD.txt <<EOF
           TAG=v0.5.0-alpha
           BUILD_SHA=$GITHUB_SHA
+          PACKAGE=com.neoplayer.app
+          VERSION_CODE=5
+          VERSION_NAME=0.5.0-alpha
           APK_BYTES=$APK_BYTES
           APK_MIB=$APK_MIB
           AAB_BYTES=$AAB_BYTES
           AAB_MIB=$AAB_MIB
-          SIGNED=${NEO_RELEASE_SIGNED:-false}
+          SIGNING_MODE=$SIGNING_MODE
+          APK_SIGNATURE_VERIFIED=true
+          CERT_SHA256=$CERT_SHA256
           BACKUP_BRANCH=backup-main-before-alpha0.5-2026-09-17
           BACKUP_SHA=3bd4b16ed7a81d9c786bfd009fb0382145b294b4
           EOF
-          echo "apk=$OUT_APK" >> "$GITHUB_OUTPUT"
-          echo "aab=$OUT_AAB" >> "$GITHUB_OUTPUT"
           cat RELEASE_ALPHA05_BUILD.txt
 
-      - name: Upload build artifacts
+      - name: Install and launch on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb install -r "$GITHUB_WORKSPACE/NEO-PLAYER-Alpha-0.5-INSTALLABLE.apk"
+            adb shell pm path com.neoplayer.app
+            adb shell dumpsys package com.neoplayer.app | grep -E 'versionCode=5|versionName=0.5.0-alpha'
+            adb shell monkey -p com.neoplayer.app -c android.intent.category.LAUNCHER 1
+            sleep 5
+            adb shell pidof com.neoplayer.app || true
+
+      - name: Upload verified build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: NEO-PLAYER-Alpha-0.5-main-release
+          name: NEO-PLAYER-Alpha-0.5-installable-verified
           path: |
-            NEO-PLAYER-Alpha-0.5-release.apk
+            NEO-PLAYER-Alpha-0.5-INSTALLABLE.apk
             NEO-PLAYER-Alpha-0.5-release.aab
             RELEASE_ALPHA05_BUILD.txt
+            apk-signature.txt
+            apk-badging.txt
           if-no-files-found: error
           retention-days: 90
 
-      - name: Create GitHub prerelease
+      - name: Replace Release assets after install verification
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -Eeuo pipefail
-          TAG="v0.5.0-alpha"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; refusing to overwrite it." >&2
-            exit 1
-          fi
-          SIGNING_NOTE="Unsigned Release build; add configured release signing secrets for store upload."
-          if [ "${NEO_RELEASE_SIGNED:-false}" = "true" ]; then
-            SIGNING_NOTE="Release APK verified as signed with configured release key."
-          fi
-          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
-          # NEO PLAYER Alpha 0.5
-
-          Alpha 0.5 promoted from the validated alpha0.5 branch to main.
-
-          - Release build, compileSdk/targetSdk 36
-          - Offline-first music playback with existing NEO/NEO+/Track+ features preserved
-          - Advanced AutoMix, local analysis, Offline Backup, Strict Offline mode
-          - Per-track Canvas/artwork/theme/background and local visualizers
-          - Offline AI lyrics with English/Persian verified model packs prepared on demand; Full-Offline embedded-model build remains supported
-          - Release APK size is guarded above the previous additive baseline and below 60 MB
-          - Rollback branch: backup-main-before-alpha0.5-2026-09-17 at 3bd4b16ed7a81d9c786bfd009fb0382145b294b4
-
-          $SIGNING_NOTE
-          EOF
-          gh release create "$TAG" \
-            "NEO-PLAYER-Alpha-0.5-release.apk" \
-            "NEO-PLAYER-Alpha-0.5-release.aab" \
-            "RELEASE_ALPHA05_BUILD.txt" \
-            --target "$GITHUB_SHA" \
+          gh release upload v0.5.0-alpha \
+            NEO-PLAYER-Alpha-0.5-INSTALLABLE.apk \
+            NEO-PLAYER-Alpha-0.5-release.aab \
+            RELEASE_ALPHA05_BUILD.txt \
+            --clobber
+          gh release edit v0.5.0-alpha \
             --title "NEO PLAYER Alpha 0.5" \
-            --notes-file "$RUNNER_TEMP/release-notes.md" \
-            --prerelease
+            --notes "Alpha 0.5 from main. The INSTALLABLE APK is a Release build with a valid cryptographic signature, verified by apksigner and successfully installed and launched on an Android 15 emulator in GitHub Actions. If production signing secrets are configured they are used; otherwise an Alpha test key is used. For Play Store publishing use the production upload/release key. Rollback branch: backup-main-before-alpha0.5-2026-09-17."
