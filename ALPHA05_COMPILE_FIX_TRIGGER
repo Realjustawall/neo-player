@@ -1,0 +1,3 @@
+fix_only=OfflineLyricsTranscriber_nullable_finalResult,TrackExperienceApp_karaoke_remember_scope
+source_before_fix=84246343c84516e397f58b3c7184f1a4cc823e8c
+no_feature_deletion=true
