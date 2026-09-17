@@ -39,7 +39,9 @@ data class PlaylistEntity(
     val title: String,
     val description: String = "",
     val artworkUri: String? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val folderId: Long? = null,
+    val customOrder: Int = 0
 )
 
 @Entity(
@@ -49,6 +51,58 @@ data class PlaylistEntity(
     indices = [Index("playlistId")]
 )
 data class PlaylistSongEntity(val playlistId: Long, val songId: Long, val position: Int)
+
+/** Local-only folders can be nested and organize playlists without changing playlist contents. */
+@Entity(tableName = "playlist_folders", indices = [Index("parentId"), Index("position")])
+data class PlaylistFolderEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String,
+    val parentId: Long? = null,
+    val position: Int = 0,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+/** Per-playlist presentation preferences. Custom song order remains stored in playlist_songs.position. */
+@Entity(tableName = "playlist_preferences")
+data class PlaylistPreferenceEntity(
+    @PrimaryKey val playlistId: Long,
+    val sortMode: String = "custom",
+    val ascending: Boolean = true,
+    val viewMode: String = "list"
+)
+
+/** Generic pinning works for playlist, album, artist, genre and folder without duplicating tables. */
+@Entity(tableName = "pinned_collections", primaryKeys = ["type", "key"], indices = [Index("position")])
+data class PinnedCollectionEntity(
+    val type: String,
+    val key: String,
+    val position: Int = 0,
+    val pinnedAt: Long = System.currentTimeMillis()
+)
+
+/** A song can be hidden globally or only inside a particular collection scope. */
+@Entity(tableName = "hidden_songs", primaryKeys = ["songId", "scopeType", "scopeKey"], indices = [Index("scopeType", "scopeKey")])
+data class HiddenSongEntity(
+    val songId: Long,
+    val scopeType: String = "global",
+    val scopeKey: String = "",
+    val hiddenAt: Long = System.currentTimeMillis()
+)
+
+/** When non-empty, included folders become an allow-list. Excluded folders still take precedence. */
+@Entity(tableName = "included_folders")
+data class IncludedFolderEntity(@PrimaryKey val path: String)
+
+/** Cached local DSP analysis used by loudness normalization and tempo-aware transitions. */
+@Entity(tableName = "audio_analysis")
+data class AudioAnalysisEntity(
+    @PrimaryKey val songId: Long,
+    val integratedLufs: Float = -14f,
+    val peakDb: Float = 0f,
+    val bpm: Float = 0f,
+    val gainMb: Int = 0,
+    val analyzedAt: Long = System.currentTimeMillis()
+)
 
 @Entity(tableName = "categories")
 data class CategoryEntity(
