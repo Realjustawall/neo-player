@@ -439,6 +439,12 @@ private fun OfflineLyricsTab(vm: TrackExperienceViewModel, fa: Boolean) {
     }
     if (song == null) return
 
+    val karaokeWords = remember(transcript?.wordTimedJson) {
+        transcript?.wordTimedJson?.let(::parseUiWords).orEmpty()
+    }
+    val karaokeChunks = remember(karaokeWords) { karaokeWords.chunked(6) }
+    val karaokeActive = findCurrentWordIndex(karaokeWords, playback.positionMs)
+
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             TrackSection(tx(fa, "100% on-device lyric generation", "تولید متن کاملاً روی دستگاه")) {
@@ -532,12 +538,9 @@ private fun OfflineLyricsTab(vm: TrackExperienceViewModel, fa: Boolean) {
                 }
             }
         }
-        transcript?.let { value ->
+        if (transcript != null) {
             item { Text(tx(fa, "Word-by-word karaoke", "کارائوکه کلمه‌به‌کلمه"), Modifier.padding(horizontal = 18.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-            val words = remember(value.wordTimedJson) { parseUiWords(value.wordTimedJson) }
-            val chunks = remember(words) { words.chunked(6) }
-            val active = findCurrentWordIndex(words, playback.positionMs)
-            items(chunks) { chunk -> KaraokeLine(chunk, active) }
+            items(karaokeChunks) { chunk -> KaraokeLine(chunk, karaokeActive) }
         }
         item { Spacer(Modifier.height(80.dp)) }
     }

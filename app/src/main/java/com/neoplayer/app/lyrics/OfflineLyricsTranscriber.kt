@@ -205,7 +205,7 @@ class OfflineLyricsTranscriber(private val context: Context) : AutoCloseable {
                 }
             }
 
-            parseResult(recognizer.finalResult.orEmpty(), words)
+            parseResult(recognizer?.finalResult.orEmpty(), words)
             val normalizedWords = words
                 .asSequence()
                 .filter { it.word.isNotBlank() }
