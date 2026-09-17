@@ -4,7 +4,7 @@ on:
   push:
     branches: ['alpha0.5']
     paths:
-      - 'ALPHA05_LOCAL_OVERLAY_TRIGGER'
+      - 'ALPHA05_CHUNKS_READY'
   workflow_dispatch:
 
 permissions:
@@ -24,28 +24,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reconstruct and verify in-branch additive overlay
+      - name: Reconstruct and verify runtime overlay
         shell: bash
         run: |
           set -Eeuo pipefail
-          test -f .alpha05/overlay-v2.b64
-          base64 -d .alpha05/overlay-v2.b64 > /tmp/alpha05-overlay.zip
-          echo '505165e5b68c2e4629217f2d58855cbc2df7c31567742b60239a6995e655d3d6  /tmp/alpha05-overlay.zip' | sha256sum -c -
-          unzip -t /tmp/alpha05-overlay.zip
-          rm -rf /tmp/alpha05-overlay
-          mkdir -p /tmp/alpha05-overlay
-          unzip -q /tmp/alpha05-overlay.zip -d /tmp/alpha05-overlay
+          COUNT="$(find .alpha05/runtime_parts -maxdepth 1 -type f -name 'part*.b64' | wc -l)"
+          test "$COUNT" -eq 12
+          cat .alpha05/runtime_parts/part*.b64 | base64 -d > /tmp/alpha05-runtime.zip
+          echo '489b45421fc9ac26fcdc0dbceae986aaa84a5c89d2624bced35ee45601d71340  /tmp/alpha05-runtime.zip' | sha256sum -c -
+          test "$(stat -c %s /tmp/alpha05-runtime.zip)" -eq 106575
+          unzip -t /tmp/alpha05-runtime.zip
 
-      - name: Apply overlay without deleting existing files
+      - name: Apply runtime overlay additively
         shell: bash
         run: |
           set -Eeuo pipefail
-          SCRIPT='/tmp/alpha05-overlay/neo-player-offline-upgrade-overlay/apply_overlay.py'
-          if [ ! -f "$SCRIPT" ]; then
-            SCRIPT="$(find /tmp/alpha05-overlay -name apply_overlay.py -type f | head -1)"
-          fi
-          test -f "$SCRIPT"
-          python3 "$SCRIPT" --target "$GITHUB_WORKSPACE" --apply --allow-different-head
+          unzip -o /tmp/alpha05-runtime.zip -d "$GITHUB_WORKSPACE"
 
       - name: Brand branch as Alpha 0.5
         shell: bash
@@ -54,19 +48,41 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-          p=Path('app/build.gradle.kts')
-          s=p.read_text()
-          s=re.sub(r'versionCode\s*=\s*\d+', 'versionCode = 5', s, count=1)
-          s=re.sub(r'versionName\s*=\s*"[^"]+"', 'versionName = "0.5.0-alpha"', s, count=1)
-          s=re.sub(r'buildConfigField\("String",\s*"DISPLAY_VERSION",\s*"\\"[^\"]*\\""\)', 'buildConfigField("String", "DISPLAY_VERSION", "\\"Alpha 0.5\\"")', s, count=1)
+          p = Path('app/build.gradle.kts')
+          s = p.read_text()
+          s = re.sub(r'versionCode\s*=\s*\d+', 'versionCode = 5', s, count=1)
+          s = re.sub(r'versionName\s*=\s*"[^"]+"', 'versionName = "0.5.0-alpha"', s, count=1)
+          s = re.sub(
+              r'buildConfigField\("String",\s*"DISPLAY_VERSION",\s*"\\"[^\"]*\\""\)',
+              'buildConfigField("String", "DISPLAY_VERSION", "\\"Alpha 0.5\\"")',
+              s,
+              count=1,
+          )
           p.write_text(s)
           PY
           cat > ALPHA05_APPLIED.md <<'EOF'
           # NEO Player Alpha 0.5
 
-          Full additive Alpha 0.5 source: all pre-existing branch capabilities plus the Offline Pro/Track+ overlay.
-          The overlay is stored and SHA-256 verified inside this branch. No tracked source file may be deleted by bootstrap.
+          Full additive Alpha 0.5 source.
+          All pre-existing features from base 7717f88f64e88008cc31f25b99dbbcee32fa70ea are retained and the Offline Pro/Track+ runtime overlay is applied additively.
+          Runtime ZIP SHA-256: 489b45421fc9ac26fcdc0dbceae986aaa84a5c89d2624bced35ee45601d71340
+          Runtime ZIP size: 106575 bytes.
+          No tracked file deletion is permitted by this bootstrap.
           EOF
+
+      - name: Require additive feature files
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f app/src/main/java/com/neoplayer/app/analysis/AdvancedAudioAnalyzer.kt
+          test -f app/src/main/java/com/neoplayer/app/analysis/ReplayGainScanner.kt
+          test -f app/src/main/java/com/neoplayer/app/domain/OfflineBackupEngine.kt
+          test -f app/src/main/java/com/neoplayer/app/domain/LocalRecommendationEngine.kt
+          test -f app/src/main/java/com/neoplayer/app/visual/LocalSpectrumAnalyzer.kt
+          test -f app/src/main/java/com/neoplayer/app/visual/LocalCanvasVideo.kt
+          test -f app/src/main/java/com/neoplayer/app/lyrics/OfflineLyricsTranscriber.kt
+          test -f app/src/main/java/com/neoplayer/app/lyrics/LyricsForcedAligner.kt
+          test -f app/src/main/java/com/neoplayer/app/ui/NeoOfflineProApp.kt
 
       - name: Refuse any tracked-file deletion
         shell: bash
