@@ -58,7 +58,7 @@ The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. To reproduce 
 gradle testDebugUnitTest lintDebug assembleDebug
 ```
 
-GitHub Actions renames the verified artifact to `NEO-PLAYER-Alpha-0.1.apk`. Alpha uses Android's standard debug signing key; no production signing secret is stored in the repository.
+GitHub Actions renames the current development artifact to `NEO-PLAYER-Alpha-0.3.apk` (`v0.1.0-alpha` retains its original Alpha 0.1 artifact name). Alpha uses Android's standard debug signing key; no production signing secret is stored in the repository.
 
 ## Permissions
 
@@ -67,8 +67,10 @@ GitHub Actions renames the verified artifact to `NEO-PLAYER-Alpha-0.1.apk`. Alph
 | `READ_MEDIA_AUDIO` | Index device audio on Android 13+ |
 | `READ_EXTERNAL_STORAGE` | Index device audio through Android 12L |
 | `POST_NOTIFICATIONS` | Show media controls on Android 13+ |
-| `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Continue explicit playback in the background |
+| `FOREGROUND_SERVICE` | Run explicit foreground playback on supported Android versions |
+| `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Declare the media-playback foreground-service type |
 | `WAKE_LOCK` | Maintain reliable active audio playback |
+| `INTERNET` | Contact only a user-configured optional lyrics provider when lyrics are explicitly requested |
 
 The app does not request broad file management. Deletion uses Android's scoped-storage confirmation sheet. Metadata edits are safe local-library overrides and never rewrite or risk corrupting audio bytes.
 
@@ -82,11 +84,11 @@ Alpha 0.3 adds debounced multi-facet search, square artwork surfaces, a redesign
 
 ## Automation and releases
 
-`.github/workflows/android-alpha.yml` runs unit tests, Android lint, and a debug APK build on pushes and pull requests to `main` and `develop`, and on version tags. Build artifacts are retained privately with the workflow run for 30 days.
+`.github/workflows/android-alpha.yml` runs unit tests, Android lint, and a debug APK build on pushes to `main`, `develop`, and hardening/fix branches, on pull requests targeting `main` or `develop`, and on version tags. Build artifacts are retained privately with the workflow run for 30 days.
 
 ## Privacy
 
-NEO PLAYER has no login, analytics SDK, tracking, cloud sync, or network permission. Media metadata, settings, history, collections, and lyrics remain in the app's private on-device storage.
+NEO PLAYER has no login, analytics SDK, tracking, or cloud sync. The Android `INTERNET` permission exists solely for the optional user-configured lyrics provider; the app does not perform background catalog, analytics, advertising, or telemetry requests. Media metadata, settings, history, collections, and locally saved lyrics remain in the app's on-device storage.
 
 ## License and credits
 
