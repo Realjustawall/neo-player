@@ -7,6 +7,7 @@ import android.media.audiofx.Virtualizer
 import com.neoplayer.app.data.TrackAudioEffectsEntity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.pow
 
 
 data class AudioEffectsState(
@@ -14,7 +15,12 @@ data class AudioEffectsState(
     val preset: String = "Normal",
     val bass: Int = 0,
     val virtualizer: Int = 0,
+    /** User-selected per-track positive loudness boost. */
     val loudnessMb: Int = 0,
+    /** Automatic normalization contribution. May be negative for loud source material. */
+    val normalizationGainMb: Int = 0,
+    /** Negative total gain is performed with player volume because LoudnessEnhancer cannot attenuate. */
+    val outputVolumeScale: Float = 1f,
     val bandLevels: List<Short> = emptyList()
 )
 
@@ -95,7 +101,7 @@ class AudioEffectsEngine {
         }
         setBass(desired.bass)
         setVirtualizer(desired.virtualizer)
-        setLoudness(desired.loudnessMb)
+        applyHardwareGain()
     }
 
     fun applyPreset(name: String) {
@@ -158,9 +164,31 @@ class AudioEffectsEngine {
     }
 
     fun setLoudness(gainMb: Int) {
-        val safe = gainMb.coerceIn(0, 1200)
-        runCatching { loudness?.setTargetGain(safe) }
-        _state.value = _state.value.copy(loudnessMb = safe)
+        _state.value = _state.value.copy(loudnessMb = gainMb.coerceIn(0, 1200))
+        applyHardwareGain()
+    }
+
+    fun setNormalizationGain(gainMb: Int) {
+        _state.value = _state.value.copy(normalizationGainMb = gainMb.coerceIn(-1200, 1200))
+        applyHardwareGain()
+    }
+
+    fun clearNormalization() = setNormalizationGain(0)
+
+    private fun applyHardwareGain() {
+        val state = _state.value
+        val totalGainMb = (state.loudnessMb + state.normalizationGainMb).coerceIn(-1200, 2400)
+        val positiveGain = totalGainMb.coerceAtLeast(0)
+        val attenuationMb = totalGainMb.coerceAtMost(0)
+        runCatching { loudness?.setTargetGain(positiveGain) }
+        val scale = if (attenuationMb < 0) {
+            10.0.pow(attenuationMb.toDouble() / 2000.0).toFloat().coerceIn(0.1f, 1f)
+        } else {
+            1f
+        }
+        if (_state.value.outputVolumeScale != scale) {
+            _state.value = _state.value.copy(outputVolumeScale = scale)
+        }
     }
 
     private fun releaseHardware() {
