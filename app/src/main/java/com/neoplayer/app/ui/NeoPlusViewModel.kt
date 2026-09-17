@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.neoplayer.app.NeoApplication
 import com.neoplayer.app.data.AudioAnalysisEntity
+import com.neoplayer.app.data.FolderSummary
 import com.neoplayer.app.data.SongEntity
 import com.neoplayer.app.playback.LocalAudioAnalyzer
 import com.neoplayer.app.settings.AppSettings
@@ -53,7 +54,8 @@ class NeoPlusViewModel(application: Application) : AndroidViewModel(application)
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
     val includedFolders = repository.includedFolders.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val excludedFolders = repository.excludedFolders.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-    val folders = repository.folders.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    /** Direct MediaStore discovery, not the already-filtered Room folder list. */
+    val folders = MutableStateFlow<List<FolderSummary>>(emptyList())
     val settings: StateFlow<AppSettings> = app.settings.values
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
     val playback = app.playback.state
@@ -66,6 +68,7 @@ class NeoPlusViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         refreshCacheSize()
+        refreshSourceFolders()
 
         viewModelScope.launch {
             app.audioEffects.state
@@ -132,19 +135,26 @@ class NeoPlusViewModel(application: Application) : AndroidViewModel(application)
         repository.savePlaylistPreference(id, sortMode, ascending, viewMode)
     }
 
+    fun refreshSourceFolders() = viewModelScope.launch {
+        folders.value = repository.discoverSourceFolders(settings.value.minDurationMs)
+    }
+
     fun addSourceFolder(path: String) = viewModelScope.launch {
         repository.addSourceFolder(path)
         repository.rescan(settings.value.minDurationMs)
+        folders.value = repository.discoverSourceFolders(settings.value.minDurationMs)
     }
 
     fun removeSourceFolder(path: String) = viewModelScope.launch {
         repository.removeSourceFolder(path)
         repository.rescan(settings.value.minDurationMs)
+        folders.value = repository.discoverSourceFolders(settings.value.minDurationMs)
     }
 
     fun useAllSourceFolders() = viewModelScope.launch {
         repository.clearSourceFolders()
         repository.rescan(settings.value.minDurationMs)
+        folders.value = repository.discoverSourceFolders(settings.value.minDurationMs)
     }
 
     fun setLoudnessNormalization(enabled: Boolean) = viewModelScope.launch {
