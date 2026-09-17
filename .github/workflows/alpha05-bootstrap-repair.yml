@@ -17,14 +17,14 @@ concurrency:
 jobs:
   repair-and-apply:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Check out alpha0.5
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Recover exact part04 and reconstruct runtime ZIP
+      - name: Recover and verify all runtime chunks
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -32,36 +32,73 @@ jobs:
           from pathlib import Path
           import hashlib
 
-          path = Path('.alpha05/runtime_parts/part04.b64')
-          target = '5af312218b512e594e99673eb783d8aa50ef99894ae6c1f0a282c9c6fd552948'
-          data = path.read_bytes()
-          if len(data) == 12000 and hashlib.sha256(data).hexdigest() == target:
-              fixed = data
-              print('part04 already exact')
-          else:
-              if len(data) != 11999:
-                  raise SystemExit(f'unexpected part04 length: {len(data)}')
-              alphabet = b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-              fixed = None
-              for pos in range(len(data) + 1):
-                  left = data[:pos]
-                  right = data[pos:]
-                  for ch in alphabet:
-                      candidate = left + bytes((ch,)) + right
-                      if hashlib.sha256(candidate).hexdigest() == target:
-                          fixed = candidate
-                          print(f'recovered missing base64 character at offset {pos}: {chr(ch)}')
-                          break
-                  if fixed is not None:
-                      break
-              if fixed is None:
-                  raise SystemExit('unable to recover exact part04')
+          expected = [
+              (12000, 'e311e4e5fbbc5628ffc3a00931c9874c698238ad7a302258f2e05e1f133cf26c'),
+              (12000, 'b0a462749fab2f33181505f2e2d4726b9b5c7b29393e815323ff95b8ef6d80ae'),
+              (12000, '9460f1613bd4007517eee983d5dbb7b3b3ec87918d3957c4ed6bc597f7c95364'),
+              (12000, '173b2f298ed786b7a0fee73cd13ad491e8d08497c0a2a2660fcd6478245434e2'),
+              (12000, '5af312218b512e594e99673eb783d8aa50ef99894ae6c1f0a282c9c6fd552948'),
+              (12000, '02106a9d3f3cd1ffb8de85ba579b649b40d47b0dd90474e5a37c28ae35a2e28b'),
+              (12000, '05e1bbf446d726c9574faaf793c6b929ab3f8958e04217c92809ba7b4705f16e'),
+              (12000, 'efaa5e22db301a3ccc5da58c66064630920182c1384a1c35ff8dc72328694b36'),
+              (12000, '7aebfd70d8de50cc3394ac3992fb818fd3993d900eba1f180fc0b3e3c66243c6'),
+              (12000, '81b45dc1f5dd6de88e11888f396a5eaa63bf5daca09b3983010b5d29f68af414'),
+              (12000, '1f3619afddf634187a6464739c2330dc21262554632e9416baa37689479cf2ff'),
+              (10100, '7ff16c2f74b12a8c00d531ddaef823b5832a3b2a261ccd00517e3fb0bb583c85'),
+          ]
+          alphabet = b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+          def sha(data):
+              return hashlib.sha256(data).hexdigest()
+
+          def recover(data, wanted_len, wanted_sha, label):
+              if len(data) == wanted_len and sha(data) == wanted_sha:
+                  print(f'{label}: exact')
+                  return data
+
+              compact = b''.join(data.split())
+              if len(compact) == wanted_len and sha(compact) == wanted_sha:
+                  print(f'{label}: repaired whitespace corruption')
+                  return compact
+
+              if len(data) == wanted_len - 1:
+                  for pos in range(len(data) + 1):
+                      left, right = data[:pos], data[pos:]
+                      for ch in alphabet:
+                          candidate = left + bytes((ch,)) + right
+                          if sha(candidate) == wanted_sha:
+                              print(f'{label}: inserted {chr(ch)!r} at {pos}')
+                              return candidate
+
+              if len(data) == wanted_len + 1:
+                  for pos in range(len(data)):
+                      candidate = data[:pos] + data[pos + 1:]
+                      if sha(candidate) == wanted_sha:
+                          print(f'{label}: removed extra byte at {pos}')
+                          return candidate
+
+              if len(data) == wanted_len:
+                  for pos, old in enumerate(data):
+                      left, right = data[:pos], data[pos + 1:]
+                      for ch in alphabet:
+                          if ch == old:
+                              continue
+                          candidate = left + bytes((ch,)) + right
+                          if sha(candidate) == wanted_sha:
+                              print(f'{label}: substituted offset {pos} with {chr(ch)!r}')
+                              return candidate
+
+              raise SystemExit(f'{label}: unrecoverable size={len(data)} sha={sha(data)}')
+
+          root = Path('.alpha05/runtime_parts')
+          for index, (wanted_len, wanted_sha) in enumerate(expected):
+              path = root / f'part{index:02d}.b64'
+              data = path.read_bytes()
+              fixed = recover(data, wanted_len, wanted_sha, path.name)
               path.write_bytes(fixed)
-          assert len(fixed) == 12000
-          assert hashlib.sha256(fixed).hexdigest() == target
+              assert len(fixed) == wanted_len
+              assert sha(fixed) == wanted_sha
           PY
-          test "$(stat -c %s .alpha05/runtime_parts/part04.b64)" -eq 12000
-          echo '5af312218b512e594e99673eb783d8aa50ef99894ae6c1f0a282c9c6fd552948  .alpha05/runtime_parts/part04.b64' | sha256sum -c -
           cat .alpha05/runtime_parts/part{00..11}.b64 | base64 -d > /tmp/alpha05-runtime.zip
           echo '489b45421fc9ac26fcdc0dbceae986aaa84a5c89d2624bced35ee45601d71340  /tmp/alpha05-runtime.zip' | sha256sum -c -
           test "$(stat -c %s /tmp/alpha05-runtime.zip)" -eq 106575
@@ -93,6 +130,7 @@ jobs:
           Full additive Alpha 0.5 source is applied on top of base 7717f88f64e88008cc31f25b99dbbcee32fa70ea.
           Runtime ZIP SHA-256: 489b45421fc9ac26fcdc0dbceae986aaa84a5c89d2624bced35ee45601d71340
           Runtime ZIP size: 106575 bytes.
+          All runtime chunk hashes were independently verified before extraction.
           No tracked-file deletion is permitted.
           EOF
 
@@ -137,6 +175,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No source changes to commit.'
           else
-            git commit -m 'feat: apply verified additive Alpha 0.5 runtime [alpha05-applied]'
+            git commit -m 'feat: apply complete verified additive Alpha 0.5 runtime [alpha05-applied]'
             git push origin HEAD:alpha0.5
           fi
