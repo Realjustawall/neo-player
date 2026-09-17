@@ -26,7 +26,9 @@ class MusicRepository(
     }
     private val rescanMutex = Mutex()
 
+    /** Default library excludes globally hidden tracks; rawLibrary is retained for management/analysis. */
     val songs = dao.songs()
+    val rawLibrary = dao.allSongs()
     val songsPaged = Pager(PagingConfig(pageSize = 80, prefetchDistance = 24, enablePlaceholders = false)) { dao.songsPaged() }.flow
     val albums = dao.albums()
     val artists = dao.artists()
