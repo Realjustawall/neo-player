@@ -1,0 +1,110 @@
+name: Alpha 0.5 Size Runtime Patch
+
+on:
+  push:
+    branches: ['alpha0.5']
+    paths:
+      - 'ALPHA05_SIZE_OPT_TRIGGER'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Integrate on-demand model packs without deleting features
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'pattern not found in {path}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          transcriber = 'app/src/main/java/com/neoplayer/app/lyrics/OfflineLyricsTranscriber.kt'
+          replace_once(transcriber, 'import android.net.Uri\n', 'import android.net.Uri\nimport com.neoplayer.app.BuildConfig\n')
+          replace_once(
+              transcriber,
+              '    private var bundledModelId: String? = null\n    private var bundledModel: Model? = null\n',
+              '    private var bundledModelId: String? = null\n    private var bundledModel: Model? = null\n    private val builtInStore = OfflineBuiltInModelStore(context)\n'
+          )
+          replace_once(
+              transcriber,
+              '        language: String = model?.language ?: if (bundledModelId == BUNDLED_PERSIAN_MODEL_ID) "fa" else "en",\n        onProgress: (OfflineTranscriptionProgress) -> Unit = {}\n',
+              '        language: String = model?.language ?: if (bundledModelId == BUNDLED_PERSIAN_MODEL_ID) "fa" else "en",\n        allowBuiltInModelDownload: Boolean = true,\n        onProgress: (OfflineTranscriptionProgress) -> Unit = {}\n'
+          )
+          replace_once(
+              transcriber,
+              '        val ownedModel = if (model == null) bundledModel(bundledModelId) else Model(model.localPath)\n',
+              '        val ownedModel = if (model == null) bundledModel(bundledModelId, allowBuiltInModelDownload) else Model(model.localPath)\n'
+          )
+          replace_once(
+              transcriber,
+              '    private suspend fun bundledModel(id: String): Model {\n',
+              '    private suspend fun bundledModel(id: String, allowNetwork: Boolean): Model {\n'
+          )
+          replace_once(
+              transcriber,
+              '        bundledModel = null\n        bundledModelId = null\n        val assetDir = when (id) {\n',
+              '        bundledModel = null\n        bundledModelId = null\n        if (!BuildConfig.EMBEDDED_VOSK_MODELS) {\n            val installed = builtInStore.resolve(id, allowNetwork)\n            return Model(installed.localPath).also { loaded ->\n                bundledModelId = id\n                bundledModel = loaded\n            }\n        }\n        val assetDir = when (id) {\n'
+          )
+
+          vm = 'app/src/main/java/com/neoplayer/app/ui/TrackExperienceViewModel.kt'
+          replace_once(
+              vm,
+              '                    bundledModelId = modelId,\n                    language = selectedLanguage.value\n',
+              '                    bundledModelId = modelId,\n                    language = selectedLanguage.value,\n                    allowBuiltInModelDownload = !settings.value.strictOfflineMode\n'
+          )
+
+          ui = 'app/src/main/java/com/neoplayer/app/ui/TrackExperienceApp.kt'
+          replace_once(
+              ui,
+              '"Bundled English and Persian mobile models work without internet. You can also import another compatible Vosk model ZIP. Audio never leaves the phone.",\n                        "مدل‌های انگلیسی و فارسی موبایل داخل برنامه بدون اینترنت کار می‌کنند. مدل سازگار Vosk دیگری هم می‌توانی با ZIP وارد کنی. صدا از گوشی خارج نمی‌شود."',
+              '"English and Persian offline packs are prepared once, checksum verified, and then work fully offline. Full-Offline builds can still embed both packs. You can also import a compatible Vosk ZIP. Audio never leaves the phone.",\n                        "بسته‌های آفلاین انگلیسی و فارسی فقط یک‌بار آماده و با SHA بررسی می‌شوند و بعد کاملاً آفلاین کار می‌کنند. نسخه Full-Offline همچنان می‌تواند هر دو مدل را داخل خود برنامه داشته باشد. همچنین می‌توانی ZIP سازگار Vosk را وارد کنی. صدا از گوشی خارج نمی‌شود."'
+          )
+          replace_once(ui, 'tx(fa, "Built-in English model", "مدل انگلیسی داخلی")', 'tx(fa, "English offline pack", "بسته آفلاین انگلیسی")')
+          replace_once(ui, 'tx(fa, "Built-in Persian model", "مدل فارسی داخلی")', 'tx(fa, "Persian offline pack", "بسته آفلاین فارسی")')
+          replace_once(ui, 'tx(fa, "Built-in English • ~40 MB model", "انگلیسی داخلی • مدل حدود ۴۰ مگابایت")', 'tx(fa, "English offline pack • ~40 MB one-time", "بسته آفلاین انگلیسی • حدود ۴۰ مگابایت یک‌بار")')
+          replace_once(ui, 'tx(fa, "Built-in Persian • ~53 MB model", "فارسی داخلی • مدل حدود ۵۳ مگابایت")', 'tx(fa, "Persian offline pack • ~53 MB one-time", "بسته آفلاین فارسی • حدود ۵۳ مگابایت یک‌بار")')
+
+          workflow = '.github/workflows/alpha05-release-final.yml'
+          replace_once(
+              workflow,
+              '          PREVIOUS_APK_BYTES=25039976\n          if [ "$APK_BYTES" -le "$PREVIOUS_APK_BYTES" ]; then\n            echo "ERROR: additive Alpha 0.5 APK must be larger than previous APK ($PREVIOUS_APK_BYTES bytes); got $APK_BYTES" >&2\n            exit 1\n          fi\n          printf \'BRANCH=alpha0.5\\nBUILD_SHA=%s\\nPREVIOUS_APK_BYTES=%s\\nAPK_BYTES=%s\\nAPK_MIB=%s\\nAAB_BYTES=%s\\nAAB_MIB=%s\\nSIZE_FLOOR=PASS\\n\' \\\n            "$GITHUB_SHA" "$PREVIOUS_APK_BYTES" "$APK_BYTES" "$APK_MIB" "$AAB_BYTES" "$AAB_MIB" > ALPHA05_BUILD_RESULT.txt\n',
+              '          PREVIOUS_APK_BYTES=25039976\n          MAX_REASONABLE_APK_BYTES=60000000\n          if [ "$APK_BYTES" -le "$PREVIOUS_APK_BYTES" ]; then\n            echo "ERROR: additive Alpha 0.5 APK must be larger than previous APK ($PREVIOUS_APK_BYTES bytes); got $APK_BYTES" >&2\n            exit 1\n          fi\n          if [ "$APK_BYTES" -gt "$MAX_REASONABLE_APK_BYTES" ]; then\n            echo "ERROR: optimized Alpha 0.5 APK should stay at or below $MAX_REASONABLE_APK_BYTES bytes; got $APK_BYTES" >&2\n            exit 1\n          fi\n          printf \'BRANCH=alpha0.5\\nBUILD_SHA=%s\\nPREVIOUS_APK_BYTES=%s\\nMAX_REASONABLE_APK_BYTES=%s\\nAPK_BYTES=%s\\nAPK_MIB=%s\\nAAB_BYTES=%s\\nAAB_MIB=%s\\nSIZE_FLOOR=PASS\\nSIZE_CEILING=PASS\\n\' \\\n            "$GITHUB_SHA" "$PREVIOUS_APK_BYTES" "$MAX_REASONABLE_APK_BYTES" "$APK_BYTES" "$APK_MIB" "$AAB_BYTES" "$AAB_MIB" > ALPHA05_BUILD_RESULT.txt\n'
+          )
+          PY
+
+      - name: Verify additive source and zero tracked deletions
+        shell: bash
+        run: |
+          test -f app/src/main/java/com/neoplayer/app/lyrics/OfflineBuiltInModelStore.kt
+          grep -q 'EMBEDDED_VOSK_MODELS' app/build.gradle.kts
+          grep -q 'allowBuiltInModelDownload' app/src/main/java/com/neoplayer/app/lyrics/OfflineLyricsTranscriber.kt
+          grep -q 'strictOfflineMode' app/src/main/java/com/neoplayer/app/ui/TrackExperienceViewModel.kt
+          DELETED="$(git diff --diff-filter=D --name-only)"
+          if [ -n "$DELETED" ]; then
+            echo "Tracked deletions are forbidden:" >&2
+            echo "$DELETED" >&2
+            exit 1
+          fi
+          git diff --stat
+
+      - name: Commit scoped runtime integration
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/neoplayer/app/lyrics/OfflineLyricsTranscriber.kt \
+                  app/src/main/java/com/neoplayer/app/ui/TrackExperienceViewModel.kt \
+                  app/src/main/java/com/neoplayer/app/ui/TrackExperienceApp.kt \
+                  .github/workflows/alpha05-release-final.yml
+          git commit -m 'feat: keep offline AI lyrics with on-demand verified model packs'
+          git push origin HEAD:alpha0.5
