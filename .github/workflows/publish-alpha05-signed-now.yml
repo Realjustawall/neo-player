@@ -53,8 +53,9 @@ jobs:
             candidate/NEO-PLAYER-Alpha-0.5-release.aab \
             candidate/RELEASE_ALPHA05_BUILD.txt \
             candidate/SHA256SUMS.txt \
-            --clobber
+            --clobber --repo "$GITHUB_REPOSITORY"
           gh release edit v0.5.0-alpha \
+            --repo "$GITHUB_REPOSITORY" \
             --title "NEO PLAYER Alpha 0.5" \
             --latest \
             --prerelease=false \
@@ -65,7 +66,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
-          gh release view v0.5.0-alpha --json tagName,name,isDraft,isPrerelease,assets,url > release-confirmation.json
+          gh release view v0.5.0-alpha --repo "$GITHUB_REPOSITORY" --json tagName,name,isDraft,isPrerelease,assets,url > release-confirmation.json
           cat release-confirmation.json
           grep -q 'NEO-PLAYER-Alpha-0.5-release.apk' release-confirmation.json
           grep -q 'NEO-PLAYER-Alpha-0.5-release.aab' release-confirmation.json
