@@ -17,7 +17,7 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 70
     steps:
       - name: Check out alpha0.5
         uses: actions/checkout@v4
@@ -25,7 +25,13 @@ jobs:
           fetch-depth: 0
 
       - name: Require complete Alpha 0.5 source
-        run: test -f ALPHA05_APPLIED.md
+        run: |
+          test -f ALPHA05_APPLIED.md
+          test -f app/src/main/java/com/neoplayer/app/analysis/AdvancedAudioAnalyzer.kt
+          test -f app/src/main/java/com/neoplayer/app/domain/OfflineBackupEngine.kt
+          test -f app/src/main/java/com/neoplayer/app/visual/LocalSpectrumAnalyzer.kt
+          test -f app/src/main/java/com/neoplayer/app/lyrics/OfflineLyricsTranscriber.kt
+          grep -q 'Full additive Alpha 0.5 source' ALPHA05_APPLIED.md
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -33,25 +39,29 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK 35
+      - name: Install Android SDK 36
         shell: bash
         run: |
           set -Eeuo pipefail
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
-      - name: Set up Gradle 8.9
+      - name: Set up Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.13'
 
-      - name: Verify build environment
+      - name: Verify release environment
         run: |
           java -version
           gradle --version
-          test -d "$ANDROID_HOME/platforms/android-35"
+          test -d "$ANDROID_HOME/platforms/android-36"
+          grep -q 'compileSdk = 36' app/build.gradle.kts
+          grep -q 'targetSdk = 36' app/build.gradle.kts
+          grep -q 'versionCode = 5' app/build.gradle.kts
+          grep -q 'versionName = "0.5.0-alpha"' app/build.gradle.kts
 
       - name: Test and lint Release
         run: gradle --no-daemon testDebugUnitTest lintRelease
@@ -59,7 +69,7 @@ jobs:
       - name: Assemble Release APK and AAB
         run: gradle --no-daemon assembleRelease bundleRelease
 
-      - name: Measure exact outputs
+      - name: Measure outputs and enforce additive size floor
         id: sizes
         shell: bash
         run: |
@@ -72,8 +82,13 @@ jobs:
           AAB_BYTES="$(stat -c %s "$AAB")"
           APK_MIB="$(awk -v b="$APK_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
           AAB_MIB="$(awk -v b="$AAB_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
-          printf 'BRANCH=alpha0.5\nBUILD_SHA=%s\nAPK_BYTES=%s\nAPK_MIB=%s\nAAB_BYTES=%s\nAAB_MIB=%s\n' \
-            "$GITHUB_SHA" "$APK_BYTES" "$APK_MIB" "$AAB_BYTES" "$AAB_MIB" > ALPHA05_BUILD_RESULT.txt
+          PREVIOUS_APK_BYTES=25039976
+          if [ "$APK_BYTES" -le "$PREVIOUS_APK_BYTES" ]; then
+            echo "ERROR: additive Alpha 0.5 APK must be larger than previous APK ($PREVIOUS_APK_BYTES bytes); got $APK_BYTES" >&2
+            exit 1
+          fi
+          printf 'BRANCH=alpha0.5\nBUILD_SHA=%s\nPREVIOUS_APK_BYTES=%s\nAPK_BYTES=%s\nAPK_MIB=%s\nAAB_BYTES=%s\nAAB_MIB=%s\nSIZE_FLOOR=PASS\n' \
+            "$GITHUB_SHA" "$PREVIOUS_APK_BYTES" "$APK_BYTES" "$APK_MIB" "$AAB_BYTES" "$AAB_MIB" > ALPHA05_BUILD_RESULT.txt
           echo "apk_path=$APK" >> "$GITHUB_OUTPUT"
           echo "aab_path=$AAB" >> "$GITHUB_OUTPUT"
           cat ALPHA05_BUILD_RESULT.txt
@@ -103,6 +118,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'Build result unchanged.'
           else
-            git commit -m 'ci: record alpha0.5 release binary sizes [skip ci]'
+            git commit -m 'ci: record alpha0.5 additive release binary sizes [skip ci]'
             git push origin HEAD:alpha0.5
           fi
