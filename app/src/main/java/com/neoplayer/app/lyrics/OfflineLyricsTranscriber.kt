@@ -6,6 +6,7 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
+import com.neoplayer.app.BuildConfig
 import com.neoplayer.app.data.OfflineLyricsTranscriptEntity
 import com.neoplayer.app.data.OfflineSpeechModelEntity
 import com.neoplayer.app.data.SongEntity
@@ -50,15 +51,17 @@ data class OfflineTranscriptionProgress(
 class OfflineLyricsTranscriber(private val context: Context) : AutoCloseable {
     private var bundledModelId: String? = null
     private var bundledModel: Model? = null
+    private val builtInStore = OfflineBuiltInModelStore(context)
 
     suspend fun transcribe(
         song: SongEntity,
         model: OfflineSpeechModelEntity? = null,
         bundledModelId: String = BUNDLED_ENGLISH_MODEL_ID,
         language: String = model?.language ?: if (bundledModelId == BUNDLED_PERSIAN_MODEL_ID) "fa" else "en",
+        allowBuiltInModelDownload: Boolean = true,
         onProgress: (OfflineTranscriptionProgress) -> Unit = {}
     ): OfflineLyricsTranscriptEntity = withContext(Dispatchers.IO) {
-        val ownedModel = if (model == null) bundledModel(bundledModelId) else Model(model.localPath)
+        val ownedModel = if (model == null) bundledModel(bundledModelId, allowBuiltInModelDownload) else Model(model.localPath)
         try {
             decode(song, ownedModel, model?.sampleRate, model?.id ?: bundledModelId, language, onProgress)
         } finally {
@@ -66,11 +69,18 @@ class OfflineLyricsTranscriber(private val context: Context) : AutoCloseable {
         }
     }
 
-    private suspend fun bundledModel(id: String): Model {
+    private suspend fun bundledModel(id: String, allowNetwork: Boolean): Model {
         if (bundledModelId == id) bundledModel?.let { return it }
         bundledModel?.let { runCatching { it.close() } }
         bundledModel = null
         bundledModelId = null
+        if (!BuildConfig.EMBEDDED_VOSK_MODELS) {
+            val installed = builtInStore.resolve(id, allowNetwork)
+            return Model(installed.localPath).also { loaded ->
+                bundledModelId = id
+                bundledModel = loaded
+            }
+        }
         val assetDir = when (id) {
             BUNDLED_PERSIAN_MODEL_ID -> BUNDLED_PERSIAN_ASSET_DIR
             else -> BUNDLED_ENGLISH_ASSET_DIR

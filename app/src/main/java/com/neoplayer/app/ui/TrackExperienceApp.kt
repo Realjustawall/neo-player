@@ -453,8 +453,8 @@ private fun OfflineLyricsTab(vm: TrackExperienceViewModel, fa: Boolean) {
                 Text(
                     tx(
                         fa,
-                        "Bundled English and Persian mobile models work without internet. You can also import another compatible Vosk model ZIP. Audio never leaves the phone.",
-                        "مدل‌های انگلیسی و فارسی موبایل داخل برنامه بدون اینترنت کار می‌کنند. مدل سازگار Vosk دیگری هم می‌توانی با ZIP وارد کنی. صدا از گوشی خارج نمی‌شود."
+                        "English and Persian offline packs are prepared once, checksum verified, and then work fully offline. Full-Offline builds can still embed both packs. You can also import a compatible Vosk ZIP. Audio never leaves the phone.",
+                        "بسته‌های آفلاین انگلیسی و فارسی فقط یک‌بار آماده و با SHA بررسی می‌شوند و بعد کاملاً آفلاین کار می‌کنند. نسخه Full-Offline همچنان می‌تواند هر دو مدل را داخل خود برنامه داشته باشد. همچنین می‌توانی ZIP سازگار Vosk را وارد کنی. صدا از گوشی خارج نمی‌شود."
                     ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp
@@ -463,19 +463,19 @@ private fun OfflineLyricsTab(vm: TrackExperienceViewModel, fa: Boolean) {
                     OutlinedButton({ modelMenu = true }, Modifier.fillMaxWidth()) {
                         Text(
                             when (selectedId) {
-                                OfflineLyricsTranscriber.BUNDLED_ENGLISH_MODEL_ID -> tx(fa, "Built-in English model", "مدل انگلیسی داخلی")
-                                OfflineLyricsTranscriber.BUNDLED_PERSIAN_MODEL_ID -> tx(fa, "Built-in Persian model", "مدل فارسی داخلی")
+                                OfflineLyricsTranscriber.BUNDLED_ENGLISH_MODEL_ID -> tx(fa, "English offline pack", "بسته آفلاین انگلیسی")
+                                OfflineLyricsTranscriber.BUNDLED_PERSIAN_MODEL_ID -> tx(fa, "Persian offline pack", "بسته آفلاین فارسی")
                                 else -> models.firstOrNull { it.id == selectedId }?.displayName ?: selectedId
                             }
                         )
                     }
                     DropdownMenu(modelMenu, { modelMenu = false }) {
                         DropdownMenuItem(
-                            text = { Text(tx(fa, "Built-in English • ~40 MB model", "انگلیسی داخلی • مدل حدود ۴۰ مگابایت")) },
+                            text = { Text(tx(fa, "English offline pack • ~40 MB one-time", "بسته آفلاین انگلیسی • حدود ۴۰ مگابایت یک‌بار")) },
                             onClick = { vm.chooseBuiltInEnglish(); modelMenu = false }
                         )
                         DropdownMenuItem(
-                            text = { Text(tx(fa, "Built-in Persian • ~53 MB model", "فارسی داخلی • مدل حدود ۵۳ مگابایت")) },
+                            text = { Text(tx(fa, "Persian offline pack • ~53 MB one-time", "بسته آفلاین فارسی • حدود ۵۳ مگابایت یک‌بار")) },
                             onClick = { vm.chooseBuiltInPersian(); modelMenu = false }
                         )
                         models.forEach { model ->

@@ -321,7 +321,8 @@ class TrackExperienceViewModel(application: Application) : AndroidViewModel(appl
                     song = song,
                     model = model,
                     bundledModelId = modelId,
-                    language = selectedLanguage.value
+                    language = selectedLanguage.value,
+                    allowBuiltInModelDownload = !settings.value.strictOfflineMode
                 ) { progress -> transcription.value = TranscriptionUiState(running = true, progress = progress) }
                 dao.saveTranscript(transcript)
                 // Never overwrite a user's existing manual/provider lyrics implicitly. The classic
