@@ -29,9 +29,15 @@ val hasReleaseSigning = listOf(
     releaseKeyPassword
 ).all { !it.isNullOrBlank() }
 
-// The actual mobile models are intentionally embedded into the APK, not downloaded at runtime.
-// Build-time download is checksum-pinned and cached under GRADLE_USER_HOME. This keeps Track+ fully
-// offline after installation while avoiding an empty model AAR and supports both English + Persian.
+// Default Play/Release builds keep every AI-lyrics capability but do not bake ~90 MiB of speech
+// model payload into the base APK. The official packs are downloaded once (checksum verified) or
+// imported from a local ZIP, then work fully offline. A Full-Offline package remains available by
+// building with -PNEO_EMBED_VOSK_MODELS=true.
+val embedOfflineSpeechModels = providers.gradleProperty("NEO_EMBED_VOSK_MODELS")
+    .map { it.equals("true", ignoreCase = true) || it == "1" }
+    .orElse(false)
+    .get()
+
 data class VoskAssetModel(val assetDir: String, val archiveName: String, val url: String, val sha256: String)
 
 val generatedVoskAssetsDir = layout.buildDirectory.dir("generated/vosk-model-assets")
@@ -118,7 +124,9 @@ val prepareVoskOfflineModels by tasks.registering {
 android {
     namespace = "com.neoplayer.app"
     compileSdk = 36
-    sourceSets.getByName("main").assets.srcDir(generatedVoskAssetsDir)
+    if (embedOfflineSpeechModels) {
+        sourceSets.getByName("main").assets.srcDir(generatedVoskAssetsDir)
+    }
 
     defaultConfig {
         applicationId = "com.neoplayer.app"
@@ -132,6 +140,7 @@ android {
         buildConfigField("String", "LYRICS_API_BASE", quotedBuildValue(lyricsApiBase))
         buildConfigField("String", "LYRICS_API_KEY", quotedBuildValue(lyricsApiKey))
         buildConfigField("boolean", "SIGNED_RELEASE", hasReleaseSigning.toString())
+        buildConfigField("boolean", "EMBEDDED_VOSK_MODELS", embedOfflineSpeechModels.toString())
     }
 
     signingConfigs {
@@ -151,9 +160,9 @@ android {
 
     buildTypes {
         release {
-            // Deliberately keep all code/resources for this additive milestone. R8 can be enabled in
-            // a later production-size pass after device QA; nothing is stripped merely to shrink APK.
-            isMinifyEnabled = false
+            // Optimize unreachable bytecode for the store build, but never resource-shrink. Explicit
+            // keep rules protect Vosk/JNA and reflection-sensitive paths so user-facing features stay.
+            isMinifyEnabled = true
             isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
@@ -176,7 +185,9 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
-tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(prepareVoskOfflineModels) }
+if (embedOfflineSpeechModels) {
+    tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(prepareVoskOfflineModels) }
+}
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
@@ -206,11 +217,9 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("com.google.guava:guava:33.3.1-android")
 
-    // Fully offline speech-to-text. English and Persian mobile models are embedded into the APK;
-    // additional Vosk models can be imported locally from ZIP without any NEO server/account.
+    // Fully offline speech-to-text after one-time model preparation. The default release keeps the
+    // engine in the APK and stores selected official/imported models in app-private storage.
     implementation("com.alphacephei:vosk-android:0.3.75@aar") {
-        // Vosk historically pulled older JNA Android natives. Keep every ABI, but force the newer
-        // Android build so 16 KB page-size compliance is verifiable instead of dropping x86_64.
         exclude(group = "net.java.dev.jna", module = "jna")
     }
     implementation("net.java.dev.jna:jna:5.18.1@aar")
