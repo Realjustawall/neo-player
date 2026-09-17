@@ -1,0 +1,187 @@
+name: Release Alpha 0.5 from Main
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ALPHA05_MAIN_RELEASE_TRIGGER'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-alpha05-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      NEO_RELEASE_STORE_PASSWORD: ${{ secrets.NEO_RELEASE_STORE_PASSWORD }}
+      NEO_RELEASE_KEY_ALIAS: ${{ secrets.NEO_RELEASE_KEY_ALIAS }}
+      NEO_RELEASE_KEY_PASSWORD: ${{ secrets.NEO_RELEASE_KEY_PASSWORD }}
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify release source and rollback branch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF_NAME" = "main"
+          test -f ALPHA05_APPLIED.md
+          test -f app/src/main/java/com/neoplayer/app/analysis/AdvancedAudioAnalyzer.kt
+          test -f app/src/main/java/com/neoplayer/app/domain/OfflineBackupEngine.kt
+          test -f app/src/main/java/com/neoplayer/app/visual/LocalSpectrumAnalyzer.kt
+          test -f app/src/main/java/com/neoplayer/app/lyrics/OfflineBuiltInModelStore.kt
+          grep -q 'compileSdk = 36' app/build.gradle.kts
+          grep -q 'targetSdk = 36' app/build.gradle.kts
+          grep -q 'versionCode = 5' app/build.gradle.kts
+          grep -q 'versionName = "0.5.0-alpha"' app/build.gradle.kts
+          git ls-remote --exit-code --heads origin backup-main-before-alpha0.5-2026-09-17
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
+      - name: Prepare optional release signing
+        shell: bash
+        env:
+          NEO_RELEASE_KEYSTORE_BASE64: ${{ secrets.NEO_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          set -Eeuo pipefail
+          if [ -n "${NEO_RELEASE_KEYSTORE_BASE64:-}" ] && \
+             [ -n "${NEO_RELEASE_STORE_PASSWORD:-}" ] && \
+             [ -n "${NEO_RELEASE_KEY_ALIAS:-}" ] && \
+             [ -n "${NEO_RELEASE_KEY_PASSWORD:-}" ]; then
+            KEYSTORE="$RUNNER_TEMP/neo-release.jks"
+            printf '%s' "$NEO_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+            test -s "$KEYSTORE"
+            echo "NEO_RELEASE_STORE_FILE=$KEYSTORE" >> "$GITHUB_ENV"
+            echo "NEO_RELEASE_SIGNED=true" >> "$GITHUB_ENV"
+          else
+            echo "NEO_RELEASE_SIGNED=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Unit tests
+        run: gradle --no-daemon testDebugUnitTest
+
+      - name: Lint Release
+        run: gradle --no-daemon lintRelease
+
+      - name: Build Release APK and AAB
+        run: gradle --no-daemon assembleRelease bundleRelease
+
+      - name: Verify and name release outputs
+        id: outputs
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          APK="$(find app/build/outputs/apk/release -type f -name '*.apk' | head -1)"
+          AAB="$(find app/build/outputs/bundle/release -type f -name '*.aab' | head -1)"
+          test -f "$APK"
+          test -f "$AAB"
+          APK_BYTES="$(stat -c %s "$APK")"
+          AAB_BYTES="$(stat -c %s "$AAB")"
+          PREVIOUS_APK_BYTES=25039976
+          MAX_REASONABLE_APK_BYTES=60000000
+          if [ "$APK_BYTES" -le "$PREVIOUS_APK_BYTES" ]; then
+            echo "APK unexpectedly smaller than additive baseline: $APK_BYTES" >&2
+            exit 1
+          fi
+          if [ "$APK_BYTES" -gt "$MAX_REASONABLE_APK_BYTES" ]; then
+            echo "APK unexpectedly larger than reasonable ceiling: $APK_BYTES" >&2
+            exit 1
+          fi
+          OUT_APK="$GITHUB_WORKSPACE/NEO-PLAYER-Alpha-0.5-release.apk"
+          OUT_AAB="$GITHUB_WORKSPACE/NEO-PLAYER-Alpha-0.5-release.aab"
+          cp "$APK" "$OUT_APK"
+          cp "$AAB" "$OUT_AAB"
+          if [ "${NEO_RELEASE_SIGNED:-false}" = "true" ]; then
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$OUT_APK"
+          fi
+          APK_MIB="$(awk -v b="$APK_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
+          AAB_MIB="$(awk -v b="$AAB_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
+          cat > RELEASE_ALPHA05_BUILD.txt <<EOF
+          TAG=v0.5.0-alpha
+          BUILD_SHA=$GITHUB_SHA
+          APK_BYTES=$APK_BYTES
+          APK_MIB=$APK_MIB
+          AAB_BYTES=$AAB_BYTES
+          AAB_MIB=$AAB_MIB
+          SIGNED=${NEO_RELEASE_SIGNED:-false}
+          BACKUP_BRANCH=backup-main-before-alpha0.5-2026-09-17
+          BACKUP_SHA=3bd4b16ed7a81d9c786bfd009fb0382145b294b4
+          EOF
+          echo "apk=$OUT_APK" >> "$GITHUB_OUTPUT"
+          echo "aab=$OUT_AAB" >> "$GITHUB_OUTPUT"
+          cat RELEASE_ALPHA05_BUILD.txt
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEO-PLAYER-Alpha-0.5-main-release
+          path: |
+            NEO-PLAYER-Alpha-0.5-release.apk
+            NEO-PLAYER-Alpha-0.5-release.aab
+            RELEASE_ALPHA05_BUILD.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          TAG="v0.5.0-alpha"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to overwrite it." >&2
+            exit 1
+          fi
+          SIGNING_NOTE="Unsigned Release build; add configured release signing secrets for store upload."
+          if [ "${NEO_RELEASE_SIGNED:-false}" = "true" ]; then
+            SIGNING_NOTE="Release APK verified as signed with configured release key."
+          fi
+          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
+          # NEO PLAYER Alpha 0.5
+
+          Alpha 0.5 promoted from the validated alpha0.5 branch to main.
+
+          - Release build, compileSdk/targetSdk 36
+          - Offline-first music playback with existing NEO/NEO+/Track+ features preserved
+          - Advanced AutoMix, local analysis, Offline Backup, Strict Offline mode
+          - Per-track Canvas/artwork/theme/background and local visualizers
+          - Offline AI lyrics with English/Persian verified model packs prepared on demand; Full-Offline embedded-model build remains supported
+          - Release APK size is guarded above the previous additive baseline and below 60 MB
+          - Rollback branch: backup-main-before-alpha0.5-2026-09-17 at 3bd4b16ed7a81d9c786bfd009fb0382145b294b4
+
+          $SIGNING_NOTE
+          EOF
+          gh release create "$TAG" \
+            "NEO-PLAYER-Alpha-0.5-release.apk" \
+            "NEO-PLAYER-Alpha-0.5-release.aab" \
+            "RELEASE_ALPHA05_BUILD.txt" \
+            --target "$GITHUB_SHA" \
+            --title "NEO PLAYER Alpha 0.5" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            --prerelease
