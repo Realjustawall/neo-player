@@ -35,9 +35,13 @@ class MusicRepository(
     val favorites = dao.favoriteIds()
     val favoriteCollections = dao.favoriteCollectionKeys()
     val playlists = dao.playlists()
+    val playlistFolders = dao.playlistFolders()
+    val pinnedCollections = dao.pinnedCollections()
+    val hiddenSongs = dao.hiddenSongs()
     val categories = dao.categories()
     val histories = dao.histories()
     val excludedFolders = dao.excludedFolders()
+    val includedFolders = dao.includedFolders()
 
     fun search(query: String) = if (query.isBlank()) songs else flow {
         val key = query.trim().lowercase(Locale.ROOT)
@@ -61,10 +65,12 @@ class MusicRepository(
 
     suspend fun rescan(minDurationMs: Long = 10_000): Int = rescanMutex.withLock {
         val excluded = dao.excludedFolders().first().map(::normalizeFolder).filter(String::isNotBlank).toSet()
+        val included = dao.includedFolders().first().map(::normalizeFolder).filter(String::isNotBlank).toSet()
         val overrides = dao.metadataOverrides().associateBy { it.songId }
         val scanned = scanner.scan(minDurationMs)
             .asSequence()
-            .filterNot { song -> isExcluded(song.relativePath, excluded) }
+            .filter { song -> included.isEmpty() || isInsideAny(song.relativePath, included) }
+            .filterNot { song -> isInsideAny(song.relativePath, excluded) }
             .map { song ->
                 overrides[song.id]?.let { value ->
                     song.copy(
@@ -85,12 +91,47 @@ class MusicRepository(
 
     suspend fun toggleFavorite(id: Long) = if (dao.isFavorite(id)) dao.removeFavorite(id) else dao.addFavorite(FavoriteEntity(id))
     suspend fun toggleFavoriteCollection(type: String, key: String) = if (dao.isFavoriteCollection(type, key)) dao.removeFavoriteCollection(type, key) else dao.addFavoriteCollection(FavoriteCollectionEntity(type, key))
+
     suspend fun createPlaylist(title: String) = dao.createPlaylist(PlaylistEntity(title = title.trim()))
     suspend fun deletePlaylist(id: Long) = dao.deletePlaylist(id)
     suspend fun addToPlaylist(playlistId: Long, songId: Long) = dao.addPlaylistSongs(playlistId, listOf(songId))
     suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>) = dao.addPlaylistSongs(playlistId, songIds)
     fun playlistSongs(id: Long) = dao.playlistSongs(id)
     suspend fun removeFromPlaylist(playlistId: Long, songId: Long) = dao.removePlaylistSong(playlistId, songId)
+    suspend fun renamePlaylist(id: Long, title: String) = dao.renamePlaylist(id, title.trim())
+    suspend fun setPlaylistArtwork(id: Long, uri: String?) = dao.setPlaylistArtwork(id, uri)
+    suspend fun setPlaylistFolder(id: Long, folderId: Long?) = dao.setPlaylistFolder(id, folderId)
+    suspend fun reorderPlaylistLibrary(ids: List<Long>) = dao.reorderPlaylistLibrary(ids.distinct())
+    suspend fun reorderPlaylist(id: Long, songs: List<Long>) = dao.reorderPlaylistPositions(id, songs.distinct())
+
+    suspend fun createPlaylistFolder(title: String, parentId: Long? = null): Long {
+        val current = dao.playlistFolders().first()
+        val nextPosition = current.filter { it.parentId == parentId }.maxOfOrNull { it.position }?.plus(1) ?: 0
+        return dao.createPlaylistFolder(PlaylistFolderEntity(title = title.trim(), parentId = parentId, position = nextPosition))
+    }
+    suspend fun renamePlaylistFolder(id: Long, title: String) = dao.renamePlaylistFolder(id, title.trim())
+    suspend fun movePlaylistFolder(id: Long, parentId: Long?, position: Int) = dao.movePlaylistFolder(id, parentId, position.coerceAtLeast(0))
+    suspend fun deletePlaylistFolder(id: Long) = dao.deletePlaylistFolder(id)
+
+    fun playlistPreference(id: Long) = dao.playlistPreference(id)
+    suspend fun savePlaylistPreference(id: Long, sortMode: String, ascending: Boolean, viewMode: String) =
+        dao.savePlaylistPreference(PlaylistPreferenceEntity(id, sortMode, ascending, viewMode))
+
+    suspend fun togglePin(type: String, key: String) = dao.togglePin(type.trim(), key.trim())
+    suspend fun reorderPins(values: List<Pair<String, String>>) = dao.reorderPins(values.distinct())
+
+    fun hiddenSongIds(scopeType: String = "global", scopeKey: String = "") = dao.hiddenSongIds(scopeType, scopeKey)
+    suspend fun toggleHiddenSong(songId: Long, scopeType: String = "global", scopeKey: String = "") =
+        dao.toggleHiddenSong(songId, scopeType, scopeKey)
+
+    suspend fun addSourceFolder(path: String) = dao.includeSourceFolder(IncludedFolderEntity(normalizeFolder(path)))
+    suspend fun removeSourceFolder(path: String) = dao.removeSourceFolder(normalizeFolder(path))
+    suspend fun clearSourceFolders() = dao.clearSourceFolders()
+
+    suspend fun audioAnalysis(songId: Long) = dao.audioAnalysis(songId)
+    suspend fun saveAudioAnalysis(value: AudioAnalysisEntity) = dao.saveAudioAnalysis(value)
+    suspend fun clearAudioAnalysis(songId: Long) = dao.clearAudioAnalysis(songId)
+    suspend fun clearAllAudioAnalysis() = dao.clearAllAudioAnalysis()
 
     suspend fun createCategory(title: String, description: String = "") = dao.createCategory(CategoryEntity(title = title.trim(), description = description.trim()))
     suspend fun deleteCategory(id: Long) = dao.deleteCategory(id)
@@ -98,11 +139,9 @@ class MusicRepository(
     suspend fun addSongsToCategory(categoryId: Long, songIds: List<Long>) = dao.addCategorySongs(categoryId, songIds)
     fun categorySongs(id: Long) = dao.categorySongs(id)
     suspend fun removeFromCategory(categoryId: Long, songId: Long) = dao.removeCategorySong(categoryId, songId)
-
-    suspend fun renamePlaylist(id: Long, title: String) = dao.renamePlaylist(id, title.trim())
-    suspend fun setPlaylistArtwork(id: Long, uri: String?) = dao.setPlaylistArtwork(id, uri)
     suspend fun updateCategory(id: Long, title: String, description: String) = dao.updateCategory(id, title.trim(), description.trim())
     suspend fun setCategoryArtwork(id: Long, uri: String?) = dao.setCategoryArtwork(id, uri)
+    suspend fun reorderCategory(id: Long, songs: List<Long>) = dao.reorderCategoryPositions(id, songs.distinct())
 
     suspend fun excludeFolder(path: String) = dao.excludeFolder(ExcludedFolderEntity(normalizeFolder(path)))
     suspend fun includeFolder(path: String) = dao.includeFolder(normalizeFolder(path))
@@ -116,9 +155,6 @@ class MusicRepository(
         dao.upsertSongs(listOf(song.copy(title = normalizedTitle, artist = normalizedArtist, album = normalizedAlbum, genre = normalizedGenre, year = year)))
         synchronized(searchCache) { searchCache.clear() }
     }
-
-    suspend fun reorderPlaylist(id: Long, songs: List<Long>) = dao.reorderPlaylistPositions(id, songs.distinct())
-    suspend fun reorderCategory(id: Long, songs: List<Long>) = dao.reorderCategoryPositions(id, songs.distinct())
 
     fun lyrics(songId: Long): Flow<LyricsEntity?> = dao.lyrics(songId)
     suspend fun saveLyrics(value: LyricsEntity) = dao.saveLyrics(value)
@@ -156,9 +192,9 @@ class MusicRepository(
 
     private fun normalizeFolder(path: String): String = path.replace('\\', '/').trim().trim('/')
 
-    private fun isExcluded(relativePath: String, excluded: Set<String>): Boolean {
+    private fun isInsideAny(relativePath: String, roots: Set<String>): Boolean {
         val normalized = normalizeFolder(relativePath)
-        return excluded.any { path -> normalized == path || normalized.startsWith("$path/") }
+        return roots.any { path -> normalized == path || normalized.startsWith("$path/") }
     }
 
     private companion object {
