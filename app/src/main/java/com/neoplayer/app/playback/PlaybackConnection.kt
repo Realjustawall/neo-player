@@ -50,6 +50,9 @@ class PlaybackConnection(private val context: Context) {
     private var future: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
     private var reconnectJob: Job? = null
+    private var seekJob: Job? = null
+    private var errorClearJob: Job? = null
+    private var pendingSeekPositionMs: Long = 0L
     private var reconnectAttempt = 0
     private var released = false
     private val _state = MutableStateFlow(PlaybackState())
@@ -73,6 +76,7 @@ class PlaybackConnection(private val context: Context) {
         override fun onPlayerError(error: PlaybackException) {
             pendingError = error.errorCodeName
             controller?.let { publish(it, rebuildQueue = false) }
+            scheduleErrorClear()
         }
     }
 
@@ -102,6 +106,7 @@ class PlaybackConnection(private val context: Context) {
                         connected = false,
                         error = error.message ?: error.javaClass.simpleName
                     )
+                    scheduleErrorClear()
                     scheduleReconnect()
                 }
         }, ContextCompat.getMainExecutor(context))
@@ -131,7 +136,23 @@ class PlaybackConnection(private val context: Context) {
     fun toggle() = controller?.run { if (isPlaying) pause() else play() }
     fun next() = controller?.seekToNextMediaItem()
     fun previous() = controller?.seekToPreviousMediaItem()
-    fun seekTo(position: Long) = controller?.let { it.seekTo(position.coerceIn(0L, safeDuration(it))) }
+
+    /**
+     * Slider callbacks can arrive much faster than the media session can usefully process them.
+     * Coalescing to roughly one command per frame keeps scrubbing responsive without flooding IPC.
+     */
+    fun seekTo(position: Long) {
+        pendingSeekPositionMs = position.coerceAtLeast(0L)
+        if (seekJob?.isActive == true) return
+        seekJob = scope.launch {
+            delay(SEEK_COALESCE_MS)
+            val target = pendingSeekPositionMs
+            controller?.let { player ->
+                val duration = safeDuration(player)
+                player.seekTo(if (duration > 0L) target.coerceAtMost(duration) else target)
+            }
+        }
+    }
 
     fun addNext(song: SongEntity) = controller?.let { player ->
         val insertAt = (player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount)
@@ -271,6 +292,14 @@ class PlaybackConnection(private val context: Context) {
         pendingError = null
     }
 
+    private fun scheduleErrorClear() {
+        errorClearJob?.cancel()
+        errorClearJob = scope.launch {
+            delay(ERROR_VISIBLE_MS)
+            _state.value = _state.value.copy(error = null)
+        }
+    }
+
     private fun maybeStartFade(player: Player) {
         val duration = safeDuration(player)
         if (duration <= 0L || crossfadeMs <= 0L || !player.isPlaying || !player.hasNextMediaItem()) return
@@ -304,6 +333,8 @@ class PlaybackConnection(private val context: Context) {
         if (released) return
         released = true
         reconnectJob?.cancel()
+        seekJob?.cancel()
+        errorClearJob?.cancel()
         cancelFade(restoreVolume = false)
         sleepTimerGeneration++
         controller?.removeListener(listener)
@@ -313,5 +344,10 @@ class PlaybackConnection(private val context: Context) {
         controller = null
         _state.value = PlaybackState()
         scope.cancel()
+    }
+
+    private companion object {
+        const val SEEK_COALESCE_MS = 24L
+        const val ERROR_VISIBLE_MS = 3_000L
     }
 }
