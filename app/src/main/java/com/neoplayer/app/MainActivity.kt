@@ -6,7 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.neoplayer.app.ui.MainViewModel
-import com.neoplayer.app.ui.NeoPlayerEnhancedApp
+import com.neoplayer.app.ui.NeoCompleteApp
 import com.neoplayer.app.ui.NeoPlusViewModel
 
 class MainActivity : ComponentActivity() {
@@ -14,7 +14,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         setContent {
-            NeoPlayerEnhancedApp(
+            NeoCompleteApp(
                 mainViewModel = viewModel<MainViewModel>(),
                 plusViewModel = viewModel<NeoPlusViewModel>()
             )
