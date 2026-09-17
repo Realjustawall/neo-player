@@ -8,8 +8,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class MediaStoreScanner(private val context: Context) {
-    suspend fun scan(minDurationMs: Long = 10_000): List<SongEntity> = withContext(Dispatchers.IO) {
-        val base = mutableListOf(
+    suspend fun scan(minDurationMs: Long = 10_000L): List<SongEntity> = withContext(Dispatchers.IO) {
+        val projection = mutableListOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
@@ -24,48 +24,74 @@ class MediaStoreScanner(private val context: Context) {
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.Audio.Media.DATE_MODIFIED
         )
-        if (Build.VERSION.SDK_INT >= 29) base += MediaStore.Audio.Media.RELATIVE_PATH
+        if (Build.VERSION.SDK_INT >= 29) projection += MediaStore.Audio.Media.RELATIVE_PATH
         if (Build.VERSION.SDK_INT >= 30) {
-            base += MediaStore.Audio.Media.ALBUM_ARTIST
-            base += MediaStore.Audio.Media.GENRE
-            base += MediaStore.Audio.Media.BITRATE
+            projection += MediaStore.Audio.Media.ALBUM_ARTIST
+            projection += MediaStore.Audio.Media.GENRE
+            projection += MediaStore.Audio.Media.BITRATE
         }
-        val result = ArrayList<SongEntity>()
-        context.contentResolver.query(
+
+        val resolver = context.contentResolver
+        val cursor = resolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            base.toTypedArray(),
+            projection.toTypedArray(),
             "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= ?",
-            arrayOf(minDurationMs.toString()),
-            "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
-        )?.use { cursor ->
-            fun text(column: String) = cursor.getColumnIndex(column).takeIf { it >= 0 }?.let(cursor::getString).orEmpty()
-            fun long(column: String) = cursor.getColumnIndex(column).takeIf { it >= 0 }?.let(cursor::getLong) ?: 0L
-            while (cursor.moveToNext()) {
-                val id = long(MediaStore.Audio.Media._ID)
-                val rawTrack = long(MediaStore.Audio.Media.TRACK).toInt()
+            arrayOf(minDurationMs.coerceAtLeast(0L).toString()),
+            null
+        ) ?: return@withContext emptyList()
+
+        cursor.use { c ->
+            // Resolve indexes once. getColumnIndex() inside the row loop is surprisingly expensive
+            // on large libraries and was previously repeated for almost every field of every song.
+            val idIndex = c.getColumnIndex(MediaStore.Audio.Media._ID)
+            val titleIndex = c.getColumnIndex(MediaStore.Audio.Media.TITLE)
+            val artistIndex = c.getColumnIndex(MediaStore.Audio.Media.ARTIST)
+            val albumIndex = c.getColumnIndex(MediaStore.Audio.Media.ALBUM)
+            val albumIdIndex = c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
+            val albumArtistIndex = if (Build.VERSION.SDK_INT >= 30) c.getColumnIndex(MediaStore.Audio.Media.ALBUM_ARTIST) else -1
+            val genreIndex = if (Build.VERSION.SDK_INT >= 30) c.getColumnIndex(MediaStore.Audio.Media.GENRE) else -1
+            val yearIndex = c.getColumnIndex(MediaStore.Audio.Media.YEAR)
+            val durationIndex = c.getColumnIndex(MediaStore.Audio.Media.DURATION)
+            val trackIndex = c.getColumnIndex(MediaStore.Audio.Media.TRACK)
+            val composerIndex = c.getColumnIndex(MediaStore.Audio.Media.COMPOSER)
+            val bitrateIndex = if (Build.VERSION.SDK_INT >= 30) c.getColumnIndex(MediaStore.Audio.Media.BITRATE) else -1
+            val mimeIndex = c.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
+            val sizeIndex = c.getColumnIndex(MediaStore.Audio.Media.SIZE)
+            val relativePathIndex = if (Build.VERSION.SDK_INT >= 29) c.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH) else -1
+            val dateAddedIndex = c.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
+            val dateModifiedIndex = c.getColumnIndex(MediaStore.Audio.Media.DATE_MODIFIED)
+
+            fun text(index: Int): String = if (index >= 0 && !c.isNull(index)) c.getString(index).orEmpty() else ""
+            fun long(index: Int): Long = if (index >= 0 && !c.isNull(index)) c.getLong(index) else 0L
+
+            val result = ArrayList<SongEntity>(c.count.coerceAtLeast(16))
+            while (c.moveToNext()) {
+                val id = long(idIndex)
+                if (id <= 0L) continue
+                val rawTrack = long(trackIndex).coerceAtLeast(0L).toInt()
                 result += SongEntity(
                     id = id,
                     uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id).toString(),
-                    title = text(MediaStore.Audio.Media.TITLE).ifBlank { "Unknown title" },
-                    artist = text(MediaStore.Audio.Media.ARTIST).ifBlank { "Unknown artist" },
-                    album = text(MediaStore.Audio.Media.ALBUM).ifBlank { "Unknown album" },
-                    albumId = long(MediaStore.Audio.Media.ALBUM_ID),
-                    albumArtist = if (Build.VERSION.SDK_INT >= 30) text(MediaStore.Audio.Media.ALBUM_ARTIST) else "",
-                    genre = if (Build.VERSION.SDK_INT >= 30) text(MediaStore.Audio.Media.GENRE) else "",
-                    year = long(MediaStore.Audio.Media.YEAR).toInt(),
-                    durationMs = long(MediaStore.Audio.Media.DURATION),
+                    title = text(titleIndex).ifBlank { "Unknown title" },
+                    artist = text(artistIndex).ifBlank { "Unknown artist" },
+                    album = text(albumIndex).ifBlank { "Unknown album" },
+                    albumId = long(albumIdIndex),
+                    albumArtist = text(albumArtistIndex),
+                    genre = text(genreIndex),
+                    year = long(yearIndex).toInt(),
+                    durationMs = long(durationIndex).coerceAtLeast(0L),
                     trackNumber = rawTrack % 1000,
                     discNumber = rawTrack / 1000,
-                    composer = text(MediaStore.Audio.Media.COMPOSER),
-                    bitrate = if (Build.VERSION.SDK_INT >= 30) long(MediaStore.Audio.Media.BITRATE).toInt() else 0,
-                    mimeType = text(MediaStore.Audio.Media.MIME_TYPE),
-                    sizeBytes = long(MediaStore.Audio.Media.SIZE),
-                    relativePath = if (Build.VERSION.SDK_INT >= 29) text(MediaStore.Audio.Media.RELATIVE_PATH).trimEnd('/') else "Storage",
-                    dateAdded = long(MediaStore.Audio.Media.DATE_ADDED),
-                    dateModified = long(MediaStore.Audio.Media.DATE_MODIFIED)
+                    composer = text(composerIndex),
+                    bitrate = long(bitrateIndex).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
+                    mimeType = text(mimeIndex),
+                    sizeBytes = long(sizeIndex).coerceAtLeast(0L),
+                    relativePath = text(relativePathIndex).trimEnd('/').ifBlank { "Storage" },
+                    dateAdded = long(dateAddedIndex),
+                    dateModified = long(dateModifiedIndex)
                 )
             }
+            result
         }
-        result
     }
 }
