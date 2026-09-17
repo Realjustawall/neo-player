@@ -1,0 +1,59 @@
+name: Finalize Alpha 0.5 Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'FINALIZE_ALPHA05_VERIFICATION_TRIGGER'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download final KVM install evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          gh api /repos/${GITHUB_REPOSITORY}/actions/artifacts/10517454752/zip > evidence.zip
+          unzip -q evidence.zip -d evidence
+          test -s evidence/INSTALL_ALPHA05_KVM_VERIFICATION.txt
+          grep -q '^INSTALL_TEST=PASS$' evidence/INSTALL_ALPHA05_KVM_VERIFICATION.txt
+          grep -q '^PACKAGE=com.neoplayer.app$' evidence/INSTALL_ALPHA05_KVM_VERIFICATION.txt
+          grep -q '^VERSION_CODE=5$' evidence/INSTALL_ALPHA05_KVM_VERIFICATION.txt
+          grep -q '^VERSION_NAME=0.5.0-alpha$' evidence/INSTALL_ALPHA05_KVM_VERIFICATION.txt
+          grep -q '^Status: ok$' evidence/launch-output.txt
+          grep -q '^Success$' evidence/install-output.txt
+          ! grep -Eq 'FATAL EXCEPTION|Process: com\.neoplayer\.app' evidence/logcat.txt
+          cat evidence/INSTALL_ALPHA05_KVM_VERIFICATION.txt
+
+      - name: Attach verification proof and finalize Release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          gh release upload v0.5.0-alpha \
+            evidence/INSTALL_ALPHA05_KVM_VERIFICATION.txt \
+            --clobber --repo "$GITHUB_REPOSITORY"
+          gh release edit v0.5.0-alpha \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "NEO PLAYER Alpha 0.5" \
+            --latest \
+            --prerelease=false \
+            --notes "Alpha 0.5 from main. The attached APK is the signed Alpha-test candidate verified by GitHub Actions: Unit Tests PASS, lintRelease PASS, assembleRelease/bundleRelease PASS, apksigner verification PASS, 16 KiB zip-alignment PASS, adb install PASS, package/version verification PASS, MainActivity cold launch PASS, and the app process remained alive after 10 seconds with no FATAL EXCEPTION for com.neoplayer.app. Verified on Android 14 / API 34 x86_64 using Ubuntu KVM. APK SHA-256: 6677fc979d31cdfdd4dc4096b9b5425f983a790be15b0d12223899e396256023. Signing certificate SHA-256: a8dedb5054a809d4a7800d894aff3781489baa0fd0a5706bbf5532a123a035f4. For Play Store publishing, configure the production upload/release signing key. Rollback branch: backup-main-before-alpha0.5-2026-09-17."
+
+      - name: Confirm Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          gh release view v0.5.0-alpha --repo "$GITHUB_REPOSITORY" --json tagName,name,isDraft,isPrerelease,assets,url > release-final.json
+          cat release-final.json
+          grep -q 'NEO-PLAYER-Alpha-0.5-release.apk' release-final.json
+          grep -q 'INSTALL_ALPHA05_KVM_VERIFICATION.txt' release-final.json
