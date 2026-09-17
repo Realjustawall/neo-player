@@ -1,0 +1,83 @@
+name: Alpha 0.5 Compile Fix
+
+on:
+  push:
+    branches: ['alpha0.5']
+    paths:
+      - 'ALPHA05_COMPILE_FIX_TRIGGER'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: alpha05-compile-fix
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out alpha0.5
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply only the two verified Kotlin compile fixes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          lyrics = Path('app/src/main/java/com/neoplayer/app/lyrics/OfflineLyricsTranscriber.kt')
+          s = lyrics.read_text()
+          old = 'parseResult(recognizer.finalResult.orEmpty(), words)'
+          new = 'parseResult(recognizer?.finalResult.orEmpty(), words)'
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif new not in s:
+              raise SystemExit('OfflineLyricsTranscriber expected compile-fix target not found')
+          lyrics.write_text(s)
+
+          ui = Path('app/src/main/java/com/neoplayer/app/ui/TrackExperienceApp.kt')
+          s = ui.read_text()
+          anchor = '''    if (song == null) return\n\n    LazyColumn(Modifier.fillMaxSize()) {'''
+          replacement = '''    if (song == null) return\n\n    val karaokeWords = remember(transcript?.wordTimedJson) {\n        transcript?.wordTimedJson?.let(::parseUiWords).orEmpty()\n    }\n    val karaokeChunks = remember(karaokeWords) { karaokeWords.chunked(6) }\n    val karaokeActive = findCurrentWordIndex(karaokeWords, playback.positionMs)\n\n    LazyColumn(Modifier.fillMaxSize()) {'''
+          if anchor in s:
+              s = s.replace(anchor, replacement, 1)
+          elif 'val karaokeWords = remember(transcript?.wordTimedJson)' not in s:
+              raise SystemExit('TrackExperienceApp pre-LazyColumn compile-fix target not found')
+
+          old_block = '''        transcript?.let { value ->\n            item { Text(tx(fa, "Word-by-word karaoke", "کارائوکه کلمه‌به‌کلمه"), Modifier.padding(horizontal = 18.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }\n            val words = remember(value.wordTimedJson) { parseUiWords(value.wordTimedJson) }\n            val chunks = remember(words) { words.chunked(6) }\n            val active = findCurrentWordIndex(words, playback.positionMs)\n            items(chunks) { chunk -> KaraokeLine(chunk, active) }\n        }'''
+          new_block = '''        if (transcript != null) {\n            item { Text(tx(fa, "Word-by-word karaoke", "کارائوکه کلمه‌به‌کلمه"), Modifier.padding(horizontal = 18.dp, vertical = 8.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }\n            items(karaokeChunks) { chunk -> KaraokeLine(chunk, karaokeActive) }\n        }'''
+          if old_block in s:
+              s = s.replace(old_block, new_block, 1)
+          elif 'items(karaokeChunks) { chunk -> KaraokeLine(chunk, karaokeActive) }' not in s:
+              raise SystemExit('TrackExperienceApp LazyList compile-fix target not found')
+          ui.write_text(s)
+          PY
+
+      - name: Verify no tracked file deletion
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git add -A
+          if git diff --cached --name-status | awk '$1 ~ /^D/ {bad=1} END {exit bad ? 0 : 1}'; then
+            echo 'Refusing compile fix because it would delete a tracked file.' >&2
+            git diff --cached --name-status | awk '$1 ~ /^D/' >&2
+            exit 1
+          fi
+          git diff --cached --check
+
+      - name: Commit compile fixes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/neoplayer/app/lyrics/OfflineLyricsTranscriber.kt \
+                  app/src/main/java/com/neoplayer/app/ui/TrackExperienceApp.kt
+          git diff --cached --stat
+          git commit -m 'fix: resolve Alpha 0.5 Kotlin compile errors'
+          git push origin HEAD:alpha0.5
