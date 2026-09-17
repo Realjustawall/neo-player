@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -25,6 +26,7 @@ class MediaStoreScanner(private val context: Context) {
             MediaStore.Audio.Media.DATE_MODIFIED
         )
         if (Build.VERSION.SDK_INT >= 29) projection += MediaStore.Audio.Media.RELATIVE_PATH
+        else projection += MediaStore.Audio.Media.DATA
         if (Build.VERSION.SDK_INT >= 30) {
             projection += MediaStore.Audio.Media.ALBUM_ARTIST
             projection += MediaStore.Audio.Media.GENRE
@@ -58,6 +60,7 @@ class MediaStoreScanner(private val context: Context) {
             val mimeIndex = c.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
             val sizeIndex = c.getColumnIndex(MediaStore.Audio.Media.SIZE)
             val relativePathIndex = if (Build.VERSION.SDK_INT >= 29) c.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH) else -1
+            val dataIndex = if (Build.VERSION.SDK_INT < 29) c.getColumnIndex(MediaStore.Audio.Media.DATA) else -1
             val dateAddedIndex = c.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
             val dateModifiedIndex = c.getColumnIndex(MediaStore.Audio.Media.DATE_MODIFIED)
 
@@ -69,6 +72,11 @@ class MediaStoreScanner(private val context: Context) {
                 val id = long(idIndex)
                 if (id <= 0L) continue
                 val rawTrack = long(trackIndex).coerceAtLeast(0L).toInt()
+                val relativePath = if (Build.VERSION.SDK_INT >= 29) {
+                    text(relativePathIndex).trimEnd('/')
+                } else {
+                    text(dataIndex).takeIf(String::isNotBlank)?.let { File(it).parentFile?.path?.trim('/') }.orEmpty()
+                }.ifBlank { "Storage" }
                 result += SongEntity(
                     id = id,
                     uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id).toString(),
@@ -86,12 +94,42 @@ class MediaStoreScanner(private val context: Context) {
                     bitrate = long(bitrateIndex).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
                     mimeType = text(mimeIndex),
                     sizeBytes = long(sizeIndex).coerceAtLeast(0L),
-                    relativePath = text(relativePathIndex).trimEnd('/').ifBlank { "Storage" },
+                    relativePath = relativePath,
                     dateAdded = long(dateAddedIndex),
                     dateModified = long(dateModifiedIndex)
                 )
             }
             result
+        }
+    }
+
+    /**
+     * Discovers every available source folder directly from MediaStore, independent of the Room
+     * allow-list. This lets users add a second folder after the first one has already been selected.
+     * Only path + count are read, keeping this much cheaper than a full metadata scan.
+     */
+    suspend fun scanFolders(minDurationMs: Long = 10_000L): List<FolderSummary> = withContext(Dispatchers.IO) {
+        val pathColumn = if (Build.VERSION.SDK_INT >= 29) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
+        val cursor = context.contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            arrayOf(pathColumn),
+            "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= ?",
+            arrayOf(minDurationMs.coerceAtLeast(0L).toString()),
+            null
+        ) ?: return@withContext emptyList()
+
+        cursor.use { c ->
+            val pathIndex = c.getColumnIndex(pathColumn)
+            val counts = LinkedHashMap<String, Int>()
+            while (c.moveToNext()) {
+                val raw = if (pathIndex >= 0 && !c.isNull(pathIndex)) c.getString(pathIndex).orEmpty() else ""
+                val path = if (Build.VERSION.SDK_INT >= 29) raw.trimEnd('/') else File(raw).parentFile?.path?.trim('/').orEmpty()
+                val normalized = path.ifBlank { "Storage" }
+                counts[normalized] = (counts[normalized] ?: 0) + 1
+            }
+            counts.entries
+                .sortedBy { it.key.lowercase() }
+                .map { FolderSummary(relativePath = it.key, songCount = it.value) }
         }
     }
 }
