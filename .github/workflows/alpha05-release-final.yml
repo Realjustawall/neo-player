@@ -35,7 +35,10 @@ jobs:
           test -f app/src/main/java/com/neoplayer/app/domain/OfflineBackupEngine.kt
           test -f app/src/main/java/com/neoplayer/app/visual/LocalSpectrumAnalyzer.kt
           test -f app/src/main/java/com/neoplayer/app/lyrics/OfflineLyricsTranscriber.kt
+          test -f app/src/main/java/com/neoplayer/app/lyrics/OfflineBuiltInModelStore.kt
           grep -q 'Full additive Alpha 0.5 source' ALPHA05_APPLIED.md
+          grep -q 'EMBEDDED_VOSK_MODELS' app/build.gradle.kts
+          grep -q 'allowBuiltInModelDownload' app/src/main/java/com/neoplayer/app/lyrics/OfflineLyricsTranscriber.kt
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -89,7 +92,7 @@ jobs:
       - name: Assemble Release APK and AAB
         run: gradle --no-daemon assembleRelease bundleRelease
 
-      - name: Measure outputs and enforce additive size floor
+      - name: Measure outputs and enforce additive reasonable-size window
         id: sizes
         shell: bash
         run: |
@@ -103,12 +106,17 @@ jobs:
           APK_MIB="$(awk -v b="$APK_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
           AAB_MIB="$(awk -v b="$AAB_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
           PREVIOUS_APK_BYTES=25039976
+          MAX_REASONABLE_APK_BYTES=60000000
           if [ "$APK_BYTES" -le "$PREVIOUS_APK_BYTES" ]; then
             echo "ERROR: additive Alpha 0.5 APK must be larger than previous APK ($PREVIOUS_APK_BYTES bytes); got $APK_BYTES" >&2
             exit 1
           fi
-          printf 'BRANCH=alpha0.5\nBUILD_SHA=%s\nPREVIOUS_APK_BYTES=%s\nAPK_BYTES=%s\nAPK_MIB=%s\nAAB_BYTES=%s\nAAB_MIB=%s\nSIZE_FLOOR=PASS\n' \
-            "$GITHUB_SHA" "$PREVIOUS_APK_BYTES" "$APK_BYTES" "$APK_MIB" "$AAB_BYTES" "$AAB_MIB" > ALPHA05_BUILD_RESULT.txt
+          if [ "$APK_BYTES" -gt "$MAX_REASONABLE_APK_BYTES" ]; then
+            echo "ERROR: optimized Alpha 0.5 APK should stay at or below $MAX_REASONABLE_APK_BYTES bytes; got $APK_BYTES" >&2
+            exit 1
+          fi
+          printf 'BRANCH=alpha0.5\nBUILD_SHA=%s\nPREVIOUS_APK_BYTES=%s\nMAX_REASONABLE_APK_BYTES=%s\nAPK_BYTES=%s\nAPK_MIB=%s\nAAB_BYTES=%s\nAAB_MIB=%s\nSIZE_FLOOR=PASS\nSIZE_CEILING=PASS\n' \
+            "$GITHUB_SHA" "$PREVIOUS_APK_BYTES" "$MAX_REASONABLE_APK_BYTES" "$APK_BYTES" "$APK_MIB" "$AAB_BYTES" "$AAB_MIB" > ALPHA05_BUILD_RESULT.txt
           echo "apk_path=$APK" >> "$GITHUB_OUTPUT"
           echo "aab_path=$AAB" >> "$GITHUB_OUTPUT"
           cat ALPHA05_BUILD_RESULT.txt
