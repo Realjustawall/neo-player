@@ -15,9 +15,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  build-sign:
+    name: Build, test, lint, sign
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 70
     env:
       NEO_RELEASE_STORE_PASSWORD: ${{ secrets.NEO_RELEASE_STORE_PASSWORD }}
       NEO_RELEASE_KEY_ALIAS: ${{ secrets.NEO_RELEASE_KEY_ALIAS }}
@@ -83,8 +84,9 @@ jobs:
           fi
 
       - name: Restore persistent Alpha test signing key
+        id: alpha-key-cache
         if: env.NEO_RELEASE_SIGNED != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .ci/alpha-signing
           key: neo-player-alpha-signing-v1
@@ -110,6 +112,13 @@ jobs:
           echo "ALPHA_KEY_PASSWORD=$PASS" >> "$GITHUB_ENV"
           keytool -list -v -keystore "$KEYSTORE" -storepass "$PASS" -alias neoalpha | grep -E 'Alias name:|SHA256:'
 
+      - name: Persist Alpha test signing key immediately
+        if: env.NEO_RELEASE_SIGNED != 'true' && steps.alpha-key-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .ci/alpha-signing
+          key: neo-player-alpha-signing-v1
+
       - name: Unit tests
         run: gradle --no-daemon testDebugUnitTest
 
@@ -120,7 +129,6 @@ jobs:
         run: gradle --no-daemon clean assembleRelease bundleRelease
 
       - name: Sign fallback Alpha package and verify signatures
-        id: outputs
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -128,7 +136,7 @@ jobs:
           RAW_AAB="$(find app/build/outputs/bundle/release -type f -name '*.aab' | head -1)"
           test -s "$RAW_APK"
           test -s "$RAW_AAB"
-          OUT_APK="$GITHUB_WORKSPACE/NEO-PLAYER-Alpha-0.5-INSTALLABLE.apk"
+          OUT_APK="$GITHUB_WORKSPACE/NEO-PLAYER-Alpha-0.5-release.apk"
           OUT_AAB="$GITHUB_WORKSPACE/NEO-PLAYER-Alpha-0.5-release.aab"
           if [ "${NEO_RELEASE_SIGNED:-false}" = "true" ]; then
             cp "$RAW_APK" "$OUT_APK"
@@ -146,6 +154,7 @@ jobs:
               -sigalg SHA256withRSA -digestalg SHA-256 "$OUT_AAB" neoalpha
             SIGNING_MODE=alpha-test
           fi
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$OUT_APK"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$OUT_APK" | tee apk-signature.txt
           jarsigner -verify "$OUT_AAB" >/dev/null
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$OUT_APK" | tee apk-badging.txt
@@ -172,51 +181,131 @@ jobs:
           AAB_MIB=$AAB_MIB
           SIGNING_MODE=$SIGNING_MODE
           APK_SIGNATURE_VERIFIED=true
+          ZIPALIGN_16K_VERIFIED=true
           CERT_SHA256=$CERT_SHA256
           BACKUP_BRANCH=backup-main-before-alpha0.5-2026-09-17
           BACKUP_SHA=3bd4b16ed7a81d9c786bfd009fb0382145b294b4
           EOF
           cat RELEASE_ALPHA05_BUILD.txt
 
-      - name: Install and launch on Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          disable-animations: true
-          script: |
-            adb install -r "$GITHUB_WORKSPACE/NEO-PLAYER-Alpha-0.5-INSTALLABLE.apk"
-            adb shell pm path com.neoplayer.app
-            adb shell dumpsys package com.neoplayer.app | grep -E 'versionCode=5|versionName=0.5.0-alpha'
-            adb shell monkey -p com.neoplayer.app -c android.intent.category.LAUNCHER 1
-            sleep 5
-            adb shell pidof com.neoplayer.app || true
-
-      - name: Upload verified build artifacts
+      - name: Upload signed candidate for install verification
         uses: actions/upload-artifact@v4
         with:
-          name: NEO-PLAYER-Alpha-0.5-installable-verified
+          name: alpha05-signed-candidate
           path: |
-            NEO-PLAYER-Alpha-0.5-INSTALLABLE.apk
+            NEO-PLAYER-Alpha-0.5-release.apk
             NEO-PLAYER-Alpha-0.5-release.aab
             RELEASE_ALPHA05_BUILD.txt
             apk-signature.txt
             apk-badging.txt
           if-no-files-found: error
+          retention-days: 7
+
+  install-verify:
+    name: Install and launch on Android emulator
+    needs: build-sign
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - name: Download signed candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: alpha05-signed-candidate
+          path: candidate
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install APK and launch app on hardware-accelerated emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          cores: 2
+          disable-animations: true
+          emulator-boot-timeout: 600
+          script: |
+            set -Eeuo pipefail
+            adb wait-for-device
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+            adb shell service check package | tee package-service.txt
+            grep -q 'package: found' package-service.txt
+            adb install --no-incremental -r "$GITHUB_WORKSPACE/candidate/NEO-PLAYER-Alpha-0.5-release.apk" | tee install-output.txt
+            grep -q 'Success' install-output.txt
+            adb shell pm path com.neoplayer.app | tee package-path.txt
+            grep -q 'package:' package-path.txt
+            adb shell dumpsys package com.neoplayer.app | grep -E 'versionCode=5|versionName=0.5.0-alpha' | tee package-version.txt
+            grep -q 'versionCode=5' package-version.txt
+            grep -q 'versionName=0.5.0-alpha' package-version.txt
+            adb shell am force-stop com.neoplayer.app
+            adb shell am start -W -n com.neoplayer.app/.MainActivity | tee launch-output.txt
+            grep -q 'Status: ok' launch-output.txt
+            sleep 5
+            PID="$(adb shell pidof com.neoplayer.app | tr -d '\r')"
+            test -n "$PID"
+            printf 'INSTALL_TEST=PASS\nEMULATOR=Android_15_API_35_google_apis_x86_64\nRUNNER=macos-15-intel\nPACKAGE=com.neoplayer.app\nVERSION_CODE=5\nVERSION_NAME=0.5.0-alpha\nPID=%s\n' "$PID" > INSTALL_ALPHA05_VERIFICATION.txt
+            cat INSTALL_ALPHA05_VERIFICATION.txt
+
+      - name: Upload install evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpha05-install-evidence
+          path: |
+            INSTALL_ALPHA05_VERIFICATION.txt
+            install-output.txt
+            package-service.txt
+            package-path.txt
+            package-version.txt
+            launch-output.txt
+          if-no-files-found: error
           retention-days: 90
 
-      - name: Replace Release assets after install verification
+  publish:
+    name: Publish verified installable Alpha 0.5
+    needs: [build-sign, install-verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download signed candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: alpha05-signed-candidate
+          path: candidate
+
+      - name: Download install evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: alpha05-install-evidence
+          path: evidence
+
+      - name: Final verification gate
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          grep -q '^APK_SIGNATURE_VERIFIED=true$' candidate/RELEASE_ALPHA05_BUILD.txt
+          grep -q '^ZIPALIGN_16K_VERIFIED=true$' candidate/RELEASE_ALPHA05_BUILD.txt
+          grep -q '^INSTALL_TEST=PASS$' evidence/INSTALL_ALPHA05_VERIFICATION.txt
+          cat evidence/INSTALL_ALPHA05_VERIFICATION.txt >> candidate/RELEASE_ALPHA05_BUILD.txt
+          cat candidate/RELEASE_ALPHA05_BUILD.txt
+
+      - name: Replace GitHub Release assets only after real install passes
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -Eeuo pipefail
           gh release upload v0.5.0-alpha \
-            NEO-PLAYER-Alpha-0.5-INSTALLABLE.apk \
-            NEO-PLAYER-Alpha-0.5-release.aab \
-            RELEASE_ALPHA05_BUILD.txt \
+            candidate/NEO-PLAYER-Alpha-0.5-release.apk \
+            candidate/NEO-PLAYER-Alpha-0.5-release.aab \
+            candidate/RELEASE_ALPHA05_BUILD.txt \
+            evidence/INSTALL_ALPHA05_VERIFICATION.txt \
             --clobber
           gh release edit v0.5.0-alpha \
             --title "NEO PLAYER Alpha 0.5" \
-            --notes "Alpha 0.5 from main. The INSTALLABLE APK is a Release build with a valid cryptographic signature, verified by apksigner and successfully installed and launched on an Android 15 emulator in GitHub Actions. If production signing secrets are configured they are used; otherwise an Alpha test key is used. For Play Store publishing use the production upload/release key. Rollback branch: backup-main-before-alpha0.5-2026-09-17."
+            --latest \
+            --prerelease=false \
+            --notes "Alpha 0.5 from main. The Release APK is cryptographically signed, verified by apksigner, 16 KiB zip-alignment checked, and successfully installed and launched on an Android 15 / API 35 emulator running on GitHub's macos-15-intel runner. If production signing secrets are configured they are used; otherwise the persistent Alpha test signing key is used. For Play Store publishing, configure the production upload/release signing key. Rollback branch: backup-main-before-alpha0.5-2026-09-17."
