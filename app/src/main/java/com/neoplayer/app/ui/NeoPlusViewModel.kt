@@ -5,7 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.neoplayer.app.NeoApplication
 import com.neoplayer.app.data.AudioAnalysisEntity
-import com.neoplayer.app.data.PlaylistPreferenceEntity
 import com.neoplayer.app.data.SongEntity
 import com.neoplayer.app.playback.LocalAudioAnalyzer
 import com.neoplayer.app.settings.AppSettings
@@ -43,7 +42,9 @@ class NeoPlusViewModel(application: Application) : AndroidViewModel(application)
     private val repository = app.repository
     private val analyzer = LocalAudioAnalyzer(application)
 
-    val songs = repository.songs.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    /** Raw library is intentional here so hidden tracks remain visible in the unhide/analysis tools. */
+    val songs = repository.rawLibrary.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val visibleSongs = repository.songs.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val playlists = repository.playlists.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val playlistFolders = repository.playlistFolders.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val pinnedCollections = repository.pinnedCollections.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -105,6 +106,10 @@ class NeoPlusViewModel(application: Application) : AndroidViewModel(application)
 
     fun renamePlaylistFolder(id: Long, title: String) = viewModelScope.launch {
         if (title.isNotBlank()) repository.renamePlaylistFolder(id, title)
+    }
+
+    fun movePlaylistFolder(id: Long, parentId: Long?, position: Int) = viewModelScope.launch {
+        repository.movePlaylistFolder(id, parentId, position)
     }
 
     fun deletePlaylistFolder(id: Long) = viewModelScope.launch { repository.deletePlaylistFolder(id) }
@@ -241,6 +246,7 @@ class NeoPlusViewModel(application: Application) : AndroidViewModel(application)
         val q = query.trim()
         if (q.isBlank()) return settings.value.recentSearches.take(limit)
         return songs.value.asSequence()
+            .filterNot { it.id in hiddenGlobalIds.value }
             .flatMap { sequenceOf(it.title, it.artist, it.album, it.genre) }
             .filter { it.isNotBlank() && it.contains(q, ignoreCase = true) }
             .distinctBy { it.lowercase() }
