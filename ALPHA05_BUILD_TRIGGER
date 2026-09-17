@@ -1,1 +1,3 @@
-build alpha0.5 after additive bootstrap
+build alpha0.5 after complete verified additive runtime
+source_sha=f9325d633fc530936a3840314ca8b76824307866
+size_floor_bytes=25039976
