@@ -41,11 +41,48 @@ interface MusicDao {
     @Insert suspend fun createPlaylist(value: PlaylistEntity): Long
     @Query("UPDATE playlists SET title = :title WHERE id = :id") suspend fun renamePlaylist(id: Long, title: String)
     @Query("UPDATE playlists SET artworkUri = :uri WHERE id = :id") suspend fun setPlaylistArtwork(id: Long, uri: String?)
+    @Query("UPDATE playlists SET folderId = :folderId WHERE id = :id") suspend fun setPlaylistFolder(id: Long, folderId: Long?)
+    @Query("UPDATE playlists SET customOrder = :position WHERE id = :id") suspend fun setPlaylistCustomOrder(id: Long, position: Int)
     @Query("DELETE FROM playlists WHERE id = :id") suspend fun deletePlaylist(id: Long)
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_songs WHERE playlistId = :id") suspend fun nextPlaylistPosition(id: Long): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun addPlaylistSong(value: PlaylistSongEntity)
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId") suspend fun removePlaylistSong(playlistId: Long, songId: Long)
     @Query("SELECT songs.* FROM songs JOIN playlist_songs ON songs.id = playlist_songs.songId WHERE playlist_songs.playlistId = :id ORDER BY playlist_songs.position") fun playlistSongs(id: Long): Flow<List<SongEntity>>
+
+    @Query("SELECT * FROM playlist_folders ORDER BY position, createdAt") fun playlistFolders(): Flow<List<PlaylistFolderEntity>>
+    @Insert suspend fun createPlaylistFolder(value: PlaylistFolderEntity): Long
+    @Query("UPDATE playlist_folders SET title = :title WHERE id = :id") suspend fun renamePlaylistFolder(id: Long, title: String)
+    @Query("UPDATE playlist_folders SET parentId = :parentId, position = :position WHERE id = :id") suspend fun movePlaylistFolder(id: Long, parentId: Long?, position: Int)
+    @Query("DELETE FROM playlist_folders WHERE id = :id") suspend fun deletePlaylistFolderRow(id: Long)
+    @Query("UPDATE playlists SET folderId = NULL WHERE folderId = :folderId") suspend fun ungroupPlaylists(folderId: Long)
+    @Query("UPDATE playlist_folders SET parentId = NULL WHERE parentId = :folderId") suspend fun ungroupChildFolders(folderId: Long)
+
+    @Query("SELECT * FROM playlist_preferences WHERE playlistId = :playlistId") fun playlistPreference(playlistId: Long): Flow<PlaylistPreferenceEntity?>
+    @Upsert suspend fun savePlaylistPreference(value: PlaylistPreferenceEntity)
+
+    @Query("SELECT * FROM pinned_collections ORDER BY position, pinnedAt") fun pinnedCollections(): Flow<List<PinnedCollectionEntity>>
+    @Query("SELECT EXISTS(SELECT 1 FROM pinned_collections WHERE type = :type AND `key` = :key)") suspend fun isPinned(type: String, key: String): Boolean
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun pinCollection(value: PinnedCollectionEntity)
+    @Query("DELETE FROM pinned_collections WHERE type = :type AND `key` = :key") suspend fun unpinCollection(type: String, key: String)
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM pinned_collections") suspend fun nextPinPosition(): Int
+    @Query("UPDATE pinned_collections SET position = :position WHERE type = :type AND `key` = :key") suspend fun setPinPosition(type: String, key: String, position: Int)
+
+    @Query("SELECT * FROM hidden_songs ORDER BY hiddenAt DESC") fun hiddenSongs(): Flow<List<HiddenSongEntity>>
+    @Query("SELECT songId FROM hidden_songs WHERE scopeType = :scopeType AND scopeKey = :scopeKey") fun hiddenSongIds(scopeType: String, scopeKey: String): Flow<List<Long>>
+    @Query("SELECT EXISTS(SELECT 1 FROM hidden_songs WHERE songId = :songId AND scopeType = :scopeType AND scopeKey = :scopeKey)") suspend fun isSongHidden(songId: Long, scopeType: String, scopeKey: String): Boolean
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun hideSong(value: HiddenSongEntity)
+    @Query("DELETE FROM hidden_songs WHERE songId = :songId AND scopeType = :scopeType AND scopeKey = :scopeKey") suspend fun unhideSong(songId: Long, scopeType: String, scopeKey: String)
+
+    @Query("SELECT path FROM included_folders ORDER BY path") fun includedFolders(): Flow<List<String>>
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun includeSourceFolder(value: IncludedFolderEntity)
+    @Query("DELETE FROM included_folders WHERE path = :path") suspend fun removeSourceFolder(path: String)
+    @Query("DELETE FROM included_folders") suspend fun clearSourceFolders()
+
+    @Query("SELECT * FROM audio_analysis WHERE songId = :songId") suspend fun audioAnalysis(songId: Long): AudioAnalysisEntity?
+    @Query("SELECT * FROM audio_analysis") suspend fun audioAnalysisSnapshot(): List<AudioAnalysisEntity>
+    @Upsert suspend fun saveAudioAnalysis(value: AudioAnalysisEntity)
+    @Query("DELETE FROM audio_analysis WHERE songId = :songId") suspend fun clearAudioAnalysis(songId: Long)
+    @Query("DELETE FROM audio_analysis") suspend fun clearAllAudioAnalysis()
 
     @Query("SELECT * FROM categories ORDER BY createdAt DESC") fun categories(): Flow<List<CategoryEntity>>
     @Insert suspend fun createCategory(value: CategoryEntity): Long
@@ -104,6 +141,35 @@ interface MusicDao {
     @Transaction
     suspend fun reorderCategoryPositions(categoryId: Long, songIds: List<Long>) {
         songIds.forEachIndexed { index, songId -> setCategoryPosition(categoryId, songId, index) }
+    }
+
+    @Transaction
+    suspend fun reorderPlaylistLibrary(ids: List<Long>) {
+        ids.forEachIndexed { index, id -> setPlaylistCustomOrder(id, index) }
+    }
+
+    @Transaction
+    suspend fun deletePlaylistFolder(folderId: Long) {
+        ungroupPlaylists(folderId)
+        ungroupChildFolders(folderId)
+        deletePlaylistFolderRow(folderId)
+    }
+
+    @Transaction
+    suspend fun togglePin(type: String, key: String) {
+        if (isPinned(type, key)) unpinCollection(type, key)
+        else pinCollection(PinnedCollectionEntity(type, key, nextPinPosition()))
+    }
+
+    @Transaction
+    suspend fun reorderPins(values: List<Pair<String, String>>) {
+        values.forEachIndexed { index, value -> setPinPosition(value.first, value.second, index) }
+    }
+
+    @Transaction
+    suspend fun toggleHiddenSong(songId: Long, scopeType: String, scopeKey: String) {
+        if (isSongHidden(songId, scopeType, scopeKey)) unhideSong(songId, scopeType, scopeKey)
+        else hideSong(HiddenSongEntity(songId, scopeType, scopeKey))
     }
 
     @Transaction
