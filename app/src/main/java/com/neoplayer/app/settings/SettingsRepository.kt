@@ -3,7 +3,9 @@ package com.neoplayer.app.settings
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -30,7 +32,13 @@ data class AppSettings(
     val romanizationEnabled: Boolean = true,
     val lyricsFontSize: Int = 20,
     val lyricsAutoScroll: Boolean = true,
-    val crossfadeMs: Long = 0L
+    val crossfadeMs: Long = 0L,
+    val loudnessNormalization: Boolean = false,
+    val normalizationTargetLufs: Float = -14f,
+    val automixEnabled: Boolean = false,
+    val gaplessEnabled: Boolean = true,
+    val libraryViewMode: String = "list",
+    val recentSearches: List<String> = emptyList()
 )
 
 class SettingsRepository(private val context: Context) {
@@ -44,13 +52,19 @@ class SettingsRepository(private val context: Context) {
         val rememberQueue = booleanPreferencesKey("remember_queue")
         val resumeLast = booleanPreferencesKey("resume_last")
         val lyricsMode = stringPreferencesKey("lyrics_mode")
-        val minDuration = androidx.datastore.preferences.core.longPreferencesKey("min_duration")
-        val defaultSpeed = androidx.datastore.preferences.core.floatPreferencesKey("default_speed")
+        val minDuration = longPreferencesKey("min_duration")
+        val defaultSpeed = floatPreferencesKey("default_speed")
         val translation = booleanPreferencesKey("lyrics_translation")
         val romanization = booleanPreferencesKey("lyrics_romanization")
         val lyricsFontSize = intPreferencesKey("lyrics_font_size")
         val lyricsAutoScroll = booleanPreferencesKey("lyrics_auto_scroll")
-        val crossfadeMs = androidx.datastore.preferences.core.longPreferencesKey("crossfade_ms")
+        val crossfadeMs = longPreferencesKey("crossfade_ms")
+        val loudnessNormalization = booleanPreferencesKey("loudness_normalization")
+        val normalizationTargetLufs = floatPreferencesKey("normalization_target_lufs")
+        val automixEnabled = booleanPreferencesKey("automix_enabled")
+        val gaplessEnabled = booleanPreferencesKey("gapless_enabled")
+        val libraryViewMode = stringPreferencesKey("library_view_mode")
+        val recentSearches = stringPreferencesKey("recent_searches")
     }
 
     val values: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -70,7 +84,13 @@ class SettingsRepository(private val context: Context) {
             romanizationEnabled = p[Keys.romanization] ?: true,
             lyricsFontSize = p[Keys.lyricsFontSize] ?: 20,
             lyricsAutoScroll = p[Keys.lyricsAutoScroll] ?: true,
-            crossfadeMs = p[Keys.crossfadeMs] ?: 0L
+            crossfadeMs = p[Keys.crossfadeMs] ?: 0L,
+            loudnessNormalization = p[Keys.loudnessNormalization] ?: false,
+            normalizationTargetLufs = (p[Keys.normalizationTargetLufs] ?: -14f).coerceIn(-23f, -8f),
+            automixEnabled = p[Keys.automixEnabled] ?: false,
+            gaplessEnabled = p[Keys.gaplessEnabled] ?: true,
+            libraryViewMode = p[Keys.libraryViewMode]?.takeIf { it == "grid" || it == "list" } ?: "list",
+            recentSearches = decodeRecentSearches(p[Keys.recentSearches].orEmpty())
         )
     }
 
@@ -89,4 +109,47 @@ class SettingsRepository(private val context: Context) {
     suspend fun setLyricsFontSize(value: Int) = context.dataStore.edit { it[Keys.lyricsFontSize] = value }
     suspend fun setLyricsAutoScroll(value: Boolean) = context.dataStore.edit { it[Keys.lyricsAutoScroll] = value }
     suspend fun setCrossfadeMs(value: Long) = context.dataStore.edit { it[Keys.crossfadeMs] = value.coerceIn(0L, 12_000L) }
+    suspend fun setLoudnessNormalization(value: Boolean) = context.dataStore.edit { it[Keys.loudnessNormalization] = value }
+    suspend fun setNormalizationTargetLufs(value: Float) = context.dataStore.edit { it[Keys.normalizationTargetLufs] = value.coerceIn(-23f, -8f) }
+    suspend fun setAutomixEnabled(value: Boolean) = context.dataStore.edit { it[Keys.automixEnabled] = value }
+    suspend fun setGaplessEnabled(value: Boolean) = context.dataStore.edit { it[Keys.gaplessEnabled] = value }
+    suspend fun setLibraryViewMode(value: String) = context.dataStore.edit { it[Keys.libraryViewMode] = if (value == "grid") "grid" else "list" }
+
+    suspend fun addRecentSearch(query: String) {
+        val normalized = query.trim()
+        if (normalized.isBlank()) return
+        context.dataStore.edit { prefs ->
+            val current = decodeRecentSearches(prefs[Keys.recentSearches].orEmpty()).toMutableList()
+            current.removeAll { it.equals(normalized, ignoreCase = true) }
+            current.add(0, normalized)
+            prefs[Keys.recentSearches] = encodeRecentSearches(current.take(MAX_RECENT_SEARCHES))
+        }
+    }
+
+    suspend fun removeRecentSearch(query: String) = context.dataStore.edit { prefs ->
+        prefs[Keys.recentSearches] = encodeRecentSearches(
+            decodeRecentSearches(prefs[Keys.recentSearches].orEmpty()).filterNot { it.equals(query, ignoreCase = true) }
+        )
+    }
+
+    suspend fun clearRecentSearches() = context.dataStore.edit { it.remove(Keys.recentSearches) }
+
+    private companion object {
+        const val SEARCH_SEPARATOR = '\u001F'
+        const val MAX_RECENT_SEARCHES = 12
+
+        fun decodeRecentSearches(raw: String): List<String> = raw
+            .split(SEARCH_SEPARATOR)
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
+            .take(MAX_RECENT_SEARCHES)
+
+        fun encodeRecentSearches(values: List<String>): String = values
+            .map { it.replace(SEARCH_SEPARATOR.toString(), " ").trim() }
+            .filter(String::isNotBlank)
+            .distinct()
+            .take(MAX_RECENT_SEARCHES)
+            .joinToString(SEARCH_SEPARATOR.toString())
+    }
 }
