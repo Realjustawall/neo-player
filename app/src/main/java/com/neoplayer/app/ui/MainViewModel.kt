@@ -11,6 +11,7 @@ import com.neoplayer.app.data.SongEntity
 import com.neoplayer.app.settings.Accent
 import com.neoplayer.app.settings.AppSettings
 import com.neoplayer.app.settings.ThemeMode
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -37,8 +38,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val artists = repository.artists.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val genres = repository.genres.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val folders = repository.folders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val favoriteIds = repository.favorites.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val favoriteCollections = repository.favoriteCollections.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val favoriteIds = repository.favorites.map { it.toSet() }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+    val favoriteCollections = repository.favoriteCollections.map { it.toSet() }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
     val playlists = repository.playlists.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val categories = repository.categories.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val histories = repository.histories.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -133,6 +134,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         scanError.value = null
         try {
             repository.rescan(minDurationMs.coerceAtLeast(0L))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Throwable) {
             scanError.value = error.message ?: error.javaClass.simpleName
         } finally {
@@ -277,6 +280,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         lyricsError.value = null
         try {
             if (!repository.fetchLyrics(id)) lyricsError.value = "Lyrics provider returned no result"
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Throwable) {
             lyricsError.value = error.message ?: error.javaClass.simpleName
         } finally {
