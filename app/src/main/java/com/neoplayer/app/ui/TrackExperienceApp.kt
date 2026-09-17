@@ -2,6 +2,7 @@
 
 package com.neoplayer.app.ui
 
+import androidx.media3.common.util.UnstableApi
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -209,6 +210,7 @@ private fun TrackExperiencePanel(vm: TrackExperienceViewModel, close: () -> Unit
     }
 }
 
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun VisualTrackTab(vm: TrackExperienceViewModel, fa: Boolean) {
     val context = LocalContext.current
