@@ -2,190 +2,234 @@
 
 ![NEO PLAYER mark](app/src/main/res/drawable/ic_neo_mark.xml)
 
-**Alpha 0.3+ development** (`0.3.0-alpha`) — a modern local-first music player for Android. The immutable initial build remains available as the private `v0.1.0-alpha` Release.
+**Alpha 0.5** (`0.5.0-alpha`, versionCode 5) — a modern local-first Android music player focused on offline playback, local intelligence, advanced transitions, per-track personalization, and privacy.
 
-NEO PLAYER gives an offline music library an immersive, artwork-led home. There is no account, catalog dependency, tracking, analytics, cloud library, or server requirement. Playback, library organization, analysis, and listening data stay on the device.
+NEO PLAYER keeps the complete original player surface and adds new capabilities on top of it. Existing library, queue, playlists, favorites, categories, lyrics, themes, audio effects, search, widget, playback controls, and collection tools remain available.
 
-> Screenshots will be added after the first device QA pass.
+> Current public release: **v0.5.0-alpha**
+>
+> Release APK: about **43.7 MiB**  
+> Release AAB: about **21.6 MiB**
 
-## Original Alpha features retained
+## Alpha 0.5 highlights
 
-The advanced offline work is additive. The original Compose application is still rendered and all pre-existing controls remain available.
+### Playback and audio
 
-- MediaStore indexing for MP3, FLAC, AAC/M4A, OGG, Opus, WAV, and every audio type supported by the device
-- Songs, albums, artists, genres, and folder views with instant bilingual search
-- Media3/ExoPlayer playback in a foreground MediaSession service
-- Background, notification, lock-screen, Bluetooth, headset, and Android Auto-compatible media controls
-- Persistent queue, play next, add to queue, removal, clear, shuffle, repeat, seeking, and playback speed
-- Full-screen artwork player and persistent mini player
-- Room-backed favorites, playlists, custom categories, listening history, metadata overrides, and lyrics
-- Plain and synchronized LRC lyrics with live line highlighting, local editor, import, manual timestamping, translation, and romanization layers
-- Equalizer presets and custom bands, bass boost, virtualizer, per-track loudness enhancement, and per-track effect profiles where Android/vendor audio effects permit them
-- Sleep timer, smart local radio, time-of-day mixes, recently played/most played/never played/forgotten-favorite mixes
-- Playlist and category artwork, song sharing, scoped-storage delete confirmation, local library metadata editing, and folder exclusion
-- Paging-backed title browsing, cached/debounced multi-facet search, and size-aware Coil artwork caching
-- Orange, green, red, blue, custard, purple, cyan, pink, indigo, teal, gold, and arbitrary custom-hex accent themes
-- system, dark, light, and AMOLED display modes
-- English and Persian resources with native Android RTL layout behavior
-- Adaptive, round, monochrome launcher icon and branded splash screen
-- Private-by-default operation; internet is contacted only when a user-configured lyrics provider is explicitly requested
+- Media3/ExoPlayer foreground MediaSession playback
+- background, notification, lock-screen, Bluetooth, headset, and Android Auto-compatible media controls
+- persistent queue, shuffle, repeat, seeking, playback speed, play-next and add-to-queue
+- **true overlapping dual-decoder crossfade** with safe fallback
+- **gapless playback preference** for compatible files/codecs
+- **advanced local AutoMix** using BPM, beat grid, beat phase, phrase boundaries, musical key and Camelot compatibility
+- local playback analysis for BPM, key, mood, energy, valence, danceability, dynamic range and spectral features
+- **ReplayGain/R128-aware normalization** when tags are available, with local-analysis fallback
+- normalization and per-track audio effects remain active from the playback service even when the Activity is closed
+- per-track EQ, custom bands, bass boost, virtualizer and loudness profiles
 
-## NEO+ advanced offline experience
+### Track+ visual experience
 
-NEO+ adds the local/offline parts of a modern streaming-player experience without introducing accounts or a remote catalog.
+- custom artwork for individual songs
+- independent per-song static background image
+- background blur and opacity controls
+- local looping Canvas video per track
+- Canvas crop/fit, start/end trim and playback speed controls
+- artwork-derived or manually selected per-track theme colors
+- waveform, bars, pulse and playback-aligned local FFT/spectrum visualizers
+- Reduce Motion-aware animation controls
 
-### Audio and transitions
+### Lyrics and offline AI
 
-- **True overlapping crossfade:** a secondary ExoPlayer decoder starts the next local track while the current track fades out, then the authoritative MediaSession player takes over the already-progressed next track
-- the original codec-safe fade path is retained in code as a fallback rather than removed
-- **On-device loudness normalization:** local PCM analysis estimates integrated loudness and peak level, caches the result in Room, and applies a configurable target without uploading audio
-- automatic normalization stays separate from existing per-track EQ/loudness profiles so old user settings are preserved
-- **Local BPM analysis and AutoMix:** cached tempo estimates drive bounded tempo matching and beat-length-aligned transition windows, followed by a gradual return to the user's playback speed
-- **Gapless preference:** works with Media3's native encoder-metadata-aware gapless behavior for compatible source files
-- library-wide audio analysis is cancellable, off-main-thread, cooperatively yielding, and cached so it does not repeatedly decode already-analyzed songs
+- plain lyrics and synchronized LRC support
+- sidecar `.lrc` / `.txt` discovery
+- manual editing and timestamping
+- translation and romanization layers
+- **offline AI transcription using Vosk** for English and Persian
+- word timestamps and local karaoke highlighting
+- forced alignment for timing user-corrected/manual lyrics without automatically overwriting them
+- compatible Vosk ZIP model import
+- verified English/Persian model packs can be prepared on demand and then work fully offline
+- optional **Full-Offline build** can still embed both Vosk models using `-PNEO_EMBED_VOSK_MODELS=true`
+- Strict Offline mode prevents model/provider network access when enabled
 
-### Playlist and collection organization
+### Offline-first Spotify-style features
 
-- search inside an individual playlist
-- playlist sorting by Custom, Title, Artist, Album, Date Added, or Duration
-- ascending/descending sorting
-- independent List/Grid preference for each playlist
-- persistent custom ordering of playlists in the library
-- playlist folders, including nested folders and safe parent reassignment with cycle prevention
-- moving playlists between folders without altering their tracks
-- independent Pin system for playlists, albums, and artists; pinning does not replace or mutate the existing Favorite model
-- global Hide/Unhide for songs; hidden tracks leave normal songs/search/album/artist/genre/folder/playlist/category results while remaining recoverable from the management screen
-- separate raw-library access is retained specifically for Unhide and cached analysis management
+- **Strict Offline Mode**
+- **Offline Backup** generated from local listening history, favorites, skips and recommendation signals
+- Mood and Genre filtering for offline backup/recommendations
+- local recommendation feedback and deterministic offline scoring
+- smart mixes/radio without an account or remote catalog
 
-### Library, search, cache, and widget
+### Playlists and organization
 
-- **positive source-folder allow-list** in addition to the existing Exclude Folder feature; exclusion still takes precedence
-- source folders are discovered directly from MediaStore rather than from an already-filtered Room result, so additional folders remain selectable after an allow-list is active
-- Android 8/9 folder discovery derives real parent paths from legacy MediaStore paths
-- global List/Grid browsing preference in the additive collection organizer
-- recent local search history in DataStore
-- autocomplete suggestions from local title, artist, album, and genre metadata
-- Storage & Cache panel that measures temporary cache and can clear regeneratable cache without deleting music, playlists, favorites, categories, lyrics, history, or settings
-- Android home-screen playback widget with track title/artist, previous, play/pause, next, and app-open actions
-- widget command receiver is not exported for arbitrary third-party control
+- playlist search
+- sorting by Custom, Title, Artist, Album, Date Added or Duration
+- ascending/descending order
+- per-playlist List/Grid preference
+- custom playlist ordering
+- playlist folders including nested folders
+- playlist/folder reorder
+- pinning playlists, albums and artists
+- global Hide/Unhide
+- playlist-scoped Hide/Unhide
+- playlist filters for Genre, Mood, Key, BPM, Year and Duration
+- playlist total duration
+- M3U8 import/export
+- source-folder allow-list alongside the original Exclude Folder feature
 
-## Performance and lag hardening
+### Library, cache and search
 
-Large-library and playback hot paths have been rewritten to reduce unnecessary work while retaining the original feature surface:
+- MediaStore indexing of device-supported audio formats
+- Songs, Albums, Artists, Genres and Folders
+- incremental Room-backed library updates
+- protection against a transient null MediaStore query wiping a valid cached library
+- recent local search history
+- cached local search suggestions
+- granular cache management for regeneratable analysis/visual data
+- Android home-screen playback widget
 
-- progress refresh no longer rebuilds the complete Media3 queue every polling tick
-- seek-slider callbacks are coalesced instead of flooding MediaSession IPC
-- controller lifecycle now has failure recovery, bounded reconnect backoff, and explicit release
-- queue persistence is debounced and serialization is moved away from the hot UI/application path
-- MediaStore column indexes are cached once per scan cursor instead of repeatedly looked up per field/per row
+## Performance work
+
+Alpha 0.5 includes additive performance hardening across playback, library scanning, Room writes, queue persistence and UI state handling:
+
+- timeline/queue state is not rebuilt on every position tick
+- seek callbacks are coalesced
+- playback controller reconnect uses bounded retry/release handling
+- queue persistence is debounced and serialized off hot UI paths
+- MediaStore column indexes are cached per cursor
 - concurrent rescans are serialized
-- Room library refresh is incremental; unchanged songs are not rewritten and deleted IDs are removed in bounded chunks
-- playlist/category bulk mutations and reorders are transactional
-- history counters use atomic updates and listening time excludes paused intervals
-- favorite membership checks use set-backed state for constant-time UI lookup
-- EQ persistence and duration-triggered rescans are debounced
-- sidecar-lyrics file work and audio analysis run off the main thread
-- local analysis yields between decoder buffers and tracks, supports cancellation, and stores results for reuse
-- rapid track changes cannot apply a delayed effect profile from the previous track
-- automatic MediaStore rescans preserve the user's selected minimum-duration threshold
-- folder filtering uses normalized path boundaries rather than unsafe raw-prefix matching
+- library refresh is incremental rather than unconditional delete/insert
+- playlist/category batch writes are transactional
+- listening history updates are batched and residual listening time is flushed on pause/track change
+- analysis work is cancellable, cached and moved off the main thread
+- search suggestion indexes are cached/debounced
+- normalization target persistence is debounced
 
 ## Architecture
 
-The project deliberately keeps the original application surface while layering the new local-first tools beside it:
-
 ```text
-Classic UI (NeoPlayerApp / Compose + MVVM)
-  ├── existing library, player, settings, lyrics, favorites and collection screens
-  └── remains rendered unchanged under additive overlays
+Classic NEO UI
+  ├── library / search / playlists / categories / favorites
+  ├── player / queue / lyrics / settings
+  └── remains available under additive layers
 
-NEO+ / Collections+ additive surfaces
-  ├── playlist search/sort/grid/folders/order
-  ├── pins, hide/unhide, source-folder allow-list
-  ├── recent search + local suggestions
-  ├── cache/storage management
-  └── local audio analysis + normalization controls
+NEO+ / Track+
+  ├── playlist folders, pins, hide/unhide, filters, M3U8
+  ├── custom artwork/background/theme/Canvas
+  ├── waveform / FFT / spectrum visualizers
+  ├── offline AI lyrics + forced alignment
+  ├── Offline Backup + local recommendations
+  └── advanced local audio analysis
 
-MusicRepository
-  ├── Room v4 library cache + existing user data
-  ├── additive folder/pin/hide/preference/analysis tables
-  └── MediaStoreScanner for local files and source discovery
+MusicRepository / Room v6
+  ├── original library/user-data tables retained
+  ├── additive playlist/folder/preference tables
+  ├── visual profiles and lyrics transcript cache
+  ├── advanced audio analysis / recommendation feedback
+  └── MediaStore-backed local library
 
 PlaybackConnection → MediaController → NeoPlaybackService
-  ├── primary ExoPlayer / authoritative MediaSession
-  └── secondary transition ExoPlayer for real overlap crossfade
-
-SettingsRepository → Preferences DataStore
-PlaybackWidgetProvider → existing MediaSession
+  ├── primary authoritative ExoPlayer / MediaSession
+  ├── secondary transition player for true overlap crossfade
+  └── service-side EQ / normalization / transition orchestration
 ```
-
-Room caches query-friendly MediaStore metadata but never duplicates the user's audio files. Existing playlists, categories, favorites, lyrics, history, metadata overrides, and effect profiles migrate forward. New local tables only add playlist folders/preferences, pins, hidden-song state, source-folder selections, and cached audio analysis.
 
 ## Requirements
 
 - Android Studio Ladybug or newer
 - JDK 17
-- Android SDK 35
-- Gradle 8.9 (CI provisions it; a local Gradle installation is sufficient)
-- Android 8.0 / API 26 or newer device
+- **Android SDK 36**
+- **compileSdk 36 / targetSdk 36**
+- Gradle **8.13**
+- Android 8.0 / API 26 or newer
 
 ## Build
+
+### Debug
 
 ```bash
 gradle assembleDebug
 ```
 
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. To reproduce the complete CI gate:
+### Release APK + AAB
 
 ```bash
-gradle testDebugUnitTest lintDebug assembleDebug
+gradle testDebugUnitTest
+gradle lintRelease
+gradle assembleRelease bundleRelease
 ```
 
-GitHub Actions renames the current development artifact to `NEO-PLAYER-Alpha-0.3.apk` (`v0.1.0-alpha` retains its original Alpha 0.1 artifact name). Alpha uses Android's standard debug signing key; no production signing secret is stored in the repository.
+Outputs:
 
-## Permissions
+```text
+app/build/outputs/apk/release/*.apk
+app/build/outputs/bundle/release/*.aab
+```
+
+### Full-Offline Release
+
+To embed both English and Persian Vosk models directly into the app:
+
+```bash
+gradle -PNEO_EMBED_VOSK_MODELS=true assembleRelease bundleRelease
+```
+
+The Full-Offline build is intentionally much larger. The normal Play-oriented Release keeps AI Lyrics capability but prepares verified model packs on demand or accepts a locally imported model ZIP.
+
+## Release
+
+Current release:
+
+**NEO PLAYER Alpha 0.5 — `v0.5.0-alpha`**
+
+The validated normal Release build is approximately:
+
+- APK: **45,810,113 bytes / 43.688 MiB**
+- AAB: **22,659,587 bytes / 21.610 MiB**
+
+Release builds use R8 code optimization with explicit keep rules for runtime-sensitive libraries such as Vosk/JNA/Room/Media3. Resource shrinking remains disabled.
+
+Optional production signing is supported through release signing environment/secrets. No private keystore or signing password is committed to the repository.
+
+## Database migration
+
+The current Room database version is **v6**. Migrations are additive and preserve existing user data. New tables/columns cover Track+ visuals, offline lyrics transcripts/models, recommendation feedback, advanced audio analysis, ReplayGain/normalization metadata and Offline Backup-related state.
+
+No destructive migration is used for the Alpha 0.5 upgrade path.
+
+## Permissions and privacy
+
+NEO PLAYER remains local-first and has no account, advertising SDK or analytics requirement.
 
 | Permission | Why it is used |
 |---|---|
 | `READ_MEDIA_AUDIO` | Index device audio on Android 13+ |
-| `READ_EXTERNAL_STORAGE` | Index device audio through Android 12L |
-| `POST_NOTIFICATIONS` | Show media controls on Android 13+ |
-| `FOREGROUND_SERVICE` | Run explicit foreground playback on supported Android versions |
-| `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Declare the media-playback foreground-service type |
-| `WAKE_LOCK` | Maintain reliable active audio playback |
-| `INTERNET` | Contact only a user-configured optional lyrics provider when lyrics are explicitly requested |
+| `READ_EXTERNAL_STORAGE` | Index audio on older supported Android versions |
+| `POST_NOTIFICATIONS` | Media playback notification on Android 13+ |
+| `FOREGROUND_SERVICE` | Reliable foreground playback |
+| `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Media playback foreground-service type |
+| `WAKE_LOCK` | Maintain reliable active playback |
+| `INTERNET` | Optional lyrics provider and one-time verified offline-model-pack preparation when Strict Offline is disabled |
 
-The app does not request broad file management. Deletion uses Android's scoped-storage confirmation sheet. Metadata edits are safe local-library overrides and never rewrite or risk corrupting audio bytes.
+Local audio analysis, BPM/key/mood detection, FFT/waveform generation, ReplayGain handling, recommendations and installed AI models run on-device. Strict Offline Mode blocks optional online-provider/model-pack access.
 
-## Lyrics
+## Release rollback
 
-Lyrics pasted into the editor are saved locally. Standard LRC timestamps such as `[01:23.45]` are parsed, sorted, highlighted, and followed against playback position. Original, translation, and romanization layers are supported. Sidecar `.lrc`/`.txt` files can be discovered locally. Optional online lyrics use only an explicitly configured JSON provider; no unlicensed scraper endpoint or committed API credential is required.
+Before promoting Alpha 0.5 to `main`, a rollback branch was created:
 
-## Audio-analysis accuracy boundary
+```text
+backup-main-before-alpha0.5-2026-09-17
+SHA: 3bd4b16ed7a81d9c786bfd009fb0382145b294b4
+```
 
-NEO's new normalization and AutoMix analysis are intentionally local and dependency-light. Loudness is an RMS-derived perceptual-level estimate and BPM is estimated from a short-time energy envelope. This is useful for consistent personal-library playback and conservative tempo-aware transitions, but it is not advertised as certified EBU R128/ReplayGain analysis or as a studio-grade beat-grid/DJ engine.
-
-True dual-decoder crossfade is implemented, but simultaneous decoding is ultimately device/codec/output-route dependent. Media3 gapless behavior is also source/container/decoder dependent. NEO keeps safe fallback behavior and never removes the user's queue to implement transitions.
-
-## Database migration
-
-Room database version 4 migrates Alpha data forward. Existing songs, favorites, playlists, playlist tracks, categories, category tracks, listening history, lyrics, excluded folders, metadata overrides, favorite collections, and track audio-effect profiles remain intact. Migration 3→4 extends the playlist row with optional folder/order columns and creates additive tables for playlist folders/preferences, pins, hidden songs, included source folders, and cached audio analysis.
-
-## Automation and releases
-
-`.github/workflows/android-alpha.yml` runs unit tests, Android lint, and a debug APK build on pushes to `main`, `develop`, and hardening/fix branches, on pull requests targeting `main` or `develop`, and on version tags. Verified build artifacts and the lint report are retained with the workflow run. Development branch pushes do not publish a release unless a version tag explicitly requests one.
+This provides an exact restore point for the pre-Alpha-0.5 main branch.
 
 ## Verification boundary
 
-CI proves compilation, JVM unit tests, Android Lint, Room/KSP code generation, resource and manifest processing, and APK assembly. Physical-device QA is still necessary to measure actual frame timing/jank on weak hardware, simultaneous-decoder behavior across manufacturer codecs, Bluetooth/output-route transitions, lock-screen/notification UI, home-screen widget behavior across launchers, SD-card variants, vendor audio effects, and very large real libraries.
-
-## Privacy
-
-NEO PLAYER has no login, analytics SDK, tracking, advertising, or cloud sync. The Android `INTERNET` permission exists solely for the optional user-configured lyrics provider; the app does not perform background catalog, analytics, advertising, or telemetry requests. Media metadata, settings, history, collections, pins, hidden-song state, local analysis, and locally saved lyrics remain in on-device storage.
+CI verifies JVM unit tests, Android Lint, Room/KSP code generation, resource/manifest processing, Release APK assembly and Release AAB assembly. Device QA is still useful for manufacturer-specific codecs/audio effects, launcher widgets, Bluetooth/output-route transitions, large libraries, SD-card variants and dual-decoder behavior.
 
 ## License and credits
 
-Source is licensed under Apache License 2.0. Major libraries: AndroidX, Jetpack Compose, Media3, ExoPlayer, Room, DataStore, and Coil.
+Source is licensed under Apache License 2.0. Major libraries include AndroidX, Jetpack Compose, Media3/ExoPlayer, Room, DataStore, Coil, Vosk, JNA and Android Palette.
 
 English UI: **Made By a Wall**  
 Persian UI: **ساخته‌شده توسط یک دیوار**
