@@ -67,8 +67,24 @@ jobs:
           grep -q 'versionCode = 5' app/build.gradle.kts
           grep -q 'versionName = "0.5.0-alpha"' app/build.gradle.kts
 
-      - name: Test and lint Release
-        run: gradle --no-daemon testDebugUnitTest lintRelease
+      - name: Unit tests
+        run: gradle --no-daemon testDebugUnitTest
+
+      - name: Lint Release
+        shell: bash
+        run: |
+          set +e
+          gradle --no-daemon lintRelease
+          CODE=$?
+          if [ "$CODE" -ne 0 ]; then
+            REPORT="app/build/intermediates/lint_intermediate_text_report/release/lintReportRelease/lint-results-release.txt"
+            if [ -f "$REPORT" ]; then
+              echo '----- full lintRelease errors -----'
+              cat "$REPORT"
+              echo '----- end lintRelease errors -----'
+            fi
+          fi
+          exit "$CODE"
 
       - name: Assemble Release APK and AAB
         run: gradle --no-daemon assembleRelease bundleRelease
