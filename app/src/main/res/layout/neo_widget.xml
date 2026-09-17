@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:gravity="center_vertical"
     android:padding="14dp"
-    android:background="@android:color/black">
+    android:background="@android:color/black"
+    tools:ignore="UseAppTint">
 
     <TextView
         android:id="@+id/widget_title"
