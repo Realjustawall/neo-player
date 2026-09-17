@@ -48,7 +48,10 @@ interface MusicDao {
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_songs WHERE playlistId = :id") suspend fun nextPlaylistPosition(id: Long): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun addPlaylistSong(value: PlaylistSongEntity)
     @Query("DELETE FROM playlist_songs WHERE playlistId = :playlistId AND songId = :songId") suspend fun removePlaylistSong(playlistId: Long, songId: Long)
-    @Query("SELECT songs.* FROM songs JOIN playlist_songs ON songs.id = playlist_songs.songId WHERE playlist_songs.playlistId = :id AND NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') ORDER BY playlist_songs.position") fun playlistSongs(id: Long): Flow<List<SongEntity>>
+    @Query("SELECT songs.* FROM songs JOIN playlist_songs ON songs.id = playlist_songs.songId WHERE playlist_songs.playlistId = :id AND NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND ((h.scopeType = 'global' AND h.scopeKey = '') OR (h.scopeType = 'playlist' AND h.scopeKey = CAST(:id AS TEXT)))) ORDER BY playlist_songs.position") fun playlistSongs(id: Long): Flow<List<SongEntity>>
+    /** Raw playlist membership keeps scoped-hidden tracks manageable/unhideable in Pro tools. */
+    @Query("SELECT songs.* FROM songs JOIN playlist_songs ON songs.id = playlist_songs.songId WHERE playlist_songs.playlistId = :id ORDER BY playlist_songs.position") fun rawPlaylistSongs(id: Long): Flow<List<SongEntity>>
+    @Query("SELECT songId FROM playlist_songs WHERE playlistId = :id ORDER BY position") suspend fun playlistSongIds(id: Long): List<Long>
 
     @Query("SELECT * FROM playlist_folders ORDER BY position, createdAt") fun playlistFolders(): Flow<List<PlaylistFolderEntity>>
     @Insert suspend fun createPlaylistFolder(value: PlaylistFolderEntity): Long
@@ -93,7 +96,8 @@ interface MusicDao {
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM category_songs WHERE categoryId = :id") suspend fun nextCategoryPosition(id: Long): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun addCategorySong(value: CategorySongEntity)
     @Query("DELETE FROM category_songs WHERE categoryId = :categoryId AND songId = :songId") suspend fun removeCategorySong(categoryId: Long, songId: Long)
-    @Query("SELECT songs.* FROM songs JOIN category_songs ON songs.id = category_songs.songId WHERE category_songs.categoryId = :id AND NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND h.scopeType = 'global' AND h.scopeKey = '') ORDER BY category_songs.position") fun categorySongs(id: Long): Flow<List<SongEntity>>
+    @Query("SELECT songs.* FROM songs JOIN category_songs ON songs.id = category_songs.songId WHERE category_songs.categoryId = :id AND NOT EXISTS (SELECT 1 FROM hidden_songs h WHERE h.songId = songs.id AND ((h.scopeType = 'global' AND h.scopeKey = '') OR (h.scopeType = 'category' AND h.scopeKey = CAST(:id AS TEXT)))) ORDER BY category_songs.position") fun categorySongs(id: Long): Flow<List<SongEntity>>
+    @Query("SELECT songs.* FROM songs JOIN category_songs ON songs.id = category_songs.songId WHERE category_songs.categoryId = :id ORDER BY category_songs.position") fun rawCategorySongs(id: Long): Flow<List<SongEntity>>
 
     @Query("SELECT * FROM lyrics WHERE songId = :songId") fun lyrics(songId: Long): Flow<LyricsEntity?>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveLyrics(value: LyricsEntity)
@@ -192,8 +196,8 @@ interface MusicDao {
     }
 
     /**
-     * Incremental library replacement. A full DELETE+INSERT invalidates every observing query and
-     * briefly exposes an empty library, which becomes visible jank on large collections.
+     * Incremental library replacement. Custom per-song artwork is NEO-owned state and must survive
+     * MediaStore rescans, so incoming scanner rows inherit it before equality/update checks.
      */
     @Transaction
     suspend fun replaceLibrary(values: List<SongEntity>) {
@@ -203,8 +207,12 @@ interface MusicDao {
         }
         val existing = songSnapshot()
         val existingById = existing.associateBy { it.id }
-        val incomingIds = values.asSequence().map { it.id }.toHashSet()
-        val changed = values.filter { existingById[it.id] != it }
+        val merged = values.map { incoming ->
+            val retainedArtwork = existingById[incoming.id]?.customArtworkUri.orEmpty()
+            if (retainedArtwork.isBlank()) incoming else incoming.copy(customArtworkUri = retainedArtwork)
+        }
+        val incomingIds = merged.asSequence().map { it.id }.toHashSet()
+        val changed = merged.filter { existingById[it.id] != it }
         if (changed.isNotEmpty()) upsertSongs(changed)
 
         existing.asSequence()

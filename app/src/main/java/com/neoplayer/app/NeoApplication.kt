@@ -43,9 +43,7 @@ class NeoApplication : Application() {
 
     private val mediaObserver by lazy {
         object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) {
-                scheduleLibraryRefresh()
-            }
+            override fun onChange(selfChange: Boolean) { scheduleLibraryRefresh() }
         }
     }
 
@@ -74,25 +72,25 @@ class NeoApplication : Application() {
                 .collect { currentMinDurationMs = it.coerceAtLeast(0L) }
         }
 
-        contentResolver.registerContentObserver(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            true,
-            mediaObserver
-        )
+        appScope.launch {
+            settings.values
+                .map { it.strictOfflineMode }
+                .distinctUntilChanged()
+                .collect { strict -> lyricsProviders.setNetworkEnabled(!strict) }
+        }
+
+        contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, mediaObserver)
     }
 
     private fun scheduleLibraryRefresh() {
         rescanJob?.cancel()
         rescanJob = appScope.launch {
-            // MediaStore often emits several mutations for one file operation. Collapse the burst.
             delay(1_500L)
             runCatching { repository.rescan(currentMinDurationMs) }
         }
     }
 
     override fun onTerminate() {
-        // onTerminate is mainly useful for emulated processes, but keeping cleanup explicit also
-        // documents ownership and makes tests deterministic.
         runCatching { contentResolver.unregisterContentObserver(mediaObserver) }
         rescanJob?.cancel()
         playback.release()

@@ -1,5 +1,6 @@
 package com.neoplayer.app.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -25,9 +26,14 @@ data class SongEntity(
     val sizeBytes: Long,
     val relativePath: String,
     val dateAdded: Long,
-    val dateModified: Long
+    val dateModified: Long,
+    /** Optional per-song artwork override. Kept in songs so every existing UI surface benefits. */
+    @ColumnInfo(defaultValue = "''")
+    val customArtworkUri: String = ""
 ) {
-    val artworkUri: String get() = "content://media/external/audio/albumart/$albumId"
+    val artworkUri: String
+        get() = customArtworkUri.takeIf { it.isNotBlank() }
+            ?: "content://media/external/audio/albumart/$albumId"
 }
 
 @Entity(tableName = "favorites")

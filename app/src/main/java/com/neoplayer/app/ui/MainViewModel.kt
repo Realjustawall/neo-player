@@ -50,11 +50,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val audioPresets get() = app.audioEffects.presets
 
     val query = MutableStateFlow("")
-    val results = query
-        .debounce(220L)
-        .map(String::trim)
-        .distinctUntilChanged()
-        .flatMapLatest(repository::search)
+    val results = query.debounce(220L).map(String::trim).distinctUntilChanged().flatMapLatest(repository::search)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val scanning = MutableStateFlow(false)
@@ -72,28 +68,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settings.map { it.crossfadeMs }.distinctUntilChanged().collect { app.playback.setCrossfadeDuration(it) }
         }
 
-        // Track changes can happen faster than effect initialization. collectLatest prevents a
-        // delayed profile from the previous track being applied to the new one.
+        // Retained client restore makes changes visible immediately; the service now mirrors this
+        // logic so profiles also survive when the Activity/ViewModel is gone.
         viewModelScope.launch {
-            playback.map { it.current?.mediaId?.toLongOrNull() }
-                .filterNotNull()
-                .distinctUntilChanged()
-                .collectLatest { id ->
-                    delay(250L)
-                    if (playback.value.current?.mediaId?.toLongOrNull() == id) {
-                        repository.trackEffects(id)?.let(app.audioEffects::applyProfile)
-                            ?: app.audioEffects.resetForTrack()
-                    }
+            playback.map { it.current?.mediaId?.toLongOrNull() }.filterNotNull().distinctUntilChanged().collectLatest { id ->
+                delay(250L)
+                if (playback.value.current?.mediaId?.toLongOrNull() == id) {
+                    repository.trackEffects(id)?.let(app.audioEffects::applyProfile) ?: app.audioEffects.resetForTrack()
                 }
+            }
         }
 
-        // Accurate lightweight listening accounting. Paused time is never counted and database
-        // writes are batched rather than happening on every playback position refresh.
+        // Accurate accounting with residual flush on pause and track transition. The old logic
+        // could lose the final <15 seconds forever; this keeps the same batching but never discards
+        // listened time simply because playback paused before the next batch boundary.
         viewModelScope.launch {
             var trackedId: Long? = null
             var accumulatedMs = 0L
             var playCounted = false
+            var wasPlaying = false
             var lastTick = SystemClock.elapsedRealtime()
+
+            suspend fun flushResidual() {
+                val id = trackedId ?: return
+                if (accumulatedMs <= 0L) return
+                if (playCounted) repository.addListeningTime(id, accumulatedMs)
+                else repository.addListeningTime(id, accumulatedMs)
+                accumulatedMs = 0L
+            }
 
             while (true) {
                 delay(1_000L)
@@ -104,11 +106,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val currentId = state.current?.mediaId?.toLongOrNull()
 
                 if (currentId != trackedId) {
-                    if (trackedId != null && playCounted && accumulatedMs > 0L) {
-                        repository.addListeningTime(trackedId!!, accumulatedMs)
-                    }
+                    flushResidual()
                     trackedId = currentId
                     accumulatedMs = 0L
+                    // Play-count threshold applies to this listening session, not lifetime history.
                     playCounted = false
                 }
 
@@ -122,51 +123,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         repository.addListeningTime(currentId, accumulatedMs)
                         accumulatedMs = 0L
                     }
+                } else if (wasPlaying && !state.playing) {
+                    flushResidual()
                 }
+                wasPlaying = state.playing
             }
         }
     }
 
     fun rescan() = viewModelScope.launch { performRescan(settings.value.minDurationMs) }
-
     private suspend fun performRescan(minDurationMs: Long) {
-        scanning.value = true
-        scanError.value = null
-        try {
-            repository.rescan(minDurationMs.coerceAtLeast(0L))
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Throwable) {
-            scanError.value = error.message ?: error.javaClass.simpleName
-        } finally {
-            scanning.value = false
-        }
+        scanning.value = true; scanError.value = null
+        try { repository.rescan(minDurationMs.coerceAtLeast(0L)) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Throwable) { scanError.value = error.message ?: error.javaClass.simpleName }
+        finally { scanning.value = false }
     }
 
     fun play(song: SongEntity, list: List<SongEntity> = songs.value) = app.playback.play(song, list)
-
     fun startRadio(seed: SongEntity) {
-        val related = songs.value
-            .asSequence()
+        val related = songs.value.asSequence()
             .filter { it.id == seed.id || it.artist.equals(seed.artist, true) || (seed.genre.isNotBlank() && it.genre.equals(seed.genre, true)) }
-            .distinctBy { it.id }
-            .toList()
-            .shuffled()
+            .distinctBy { it.id }.toList().shuffled()
         app.playback.play(seed, related.ifEmpty { listOf(seed) })
     }
-
-    fun playPlaylist(id: Long) = viewModelScope.launch {
-        val list = repository.playlistSongs(id).first()
-        list.firstOrNull()?.let { first -> app.playback.play(first, list) }
-    }
-
-    fun playCategory(id: Long) = viewModelScope.launch {
-        val list = repository.categorySongs(id).first()
-        list.firstOrNull()?.let { first -> app.playback.play(first, list) }
-    }
-
+    fun playPlaylist(id: Long) = viewModelScope.launch { repository.playlistSongs(id).first().let { list -> list.firstOrNull()?.let { app.playback.play(it, list) } } }
+    fun playCategory(id: Long) = viewModelScope.launch { repository.categorySongs(id).first().let { list -> list.firstOrNull()?.let { app.playback.play(it, list) } } }
     fun togglePlayback() = app.playback.toggle()
-
     fun next() {
         val state = playback.value
         state.current?.mediaId?.toLongOrNull()?.let { id ->
@@ -176,7 +159,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         app.playback.next()
     }
-
     fun previous() = app.playback.previous()
     fun seek(position: Long) = app.playback.seekTo(position)
     fun toggleShuffle() = app.playback.toggleShuffle()
@@ -190,18 +172,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun removeQueueItem(index: Int) = app.playback.removeQueueItem(index)
     fun moveQueueItem(from: Int, to: Int) = app.playback.moveQueueItem(from, to)
 
-    fun createPlaylist(title: String) = viewModelScope.launch {
-        if (title.isNotBlank()) repository.createPlaylist(title)
-    }
-
+    fun createPlaylist(title: String) = viewModelScope.launch { if (title.isNotBlank()) repository.createPlaylist(title) }
     fun deletePlaylist(id: Long) = viewModelScope.launch { repository.deletePlaylist(id) }
     fun addToPlaylist(playlistId: Long, songId: Long) = viewModelScope.launch { repository.addToPlaylist(playlistId, songId) }
     fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>) = viewModelScope.launch { repository.addSongsToPlaylist(playlistId, songIds) }
-
-    fun createCategory(title: String, description: String = "") = viewModelScope.launch {
-        if (title.isNotBlank()) repository.createCategory(title, description)
-    }
-
+    fun createCategory(title: String, description: String = "") = viewModelScope.launch { if (title.isNotBlank()) repository.createCategory(title, description) }
     fun deleteCategory(id: Long) = viewModelScope.launch { repository.deleteCategory(id) }
     fun addToCategory(categoryId: Long, songId: Long) = viewModelScope.launch { repository.addToCategory(categoryId, songId) }
     fun setSpeed(speed: Float) = app.playback.setSpeed(speed)
@@ -210,83 +185,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val safe = value.coerceIn(0L, 12_000L)
         app.playback.setCrossfadeDuration(safe)
         crossfadePersistJob?.cancel()
-        crossfadePersistJob = viewModelScope.launch {
-            delay(120L)
-            app.settings.setCrossfadeMs(safe)
-        }
+        crossfadePersistJob = viewModelScope.launch { delay(120L); app.settings.setCrossfadeMs(safe) }
     }
-
     fun setSleepTimer(minutes: Int) = app.playback.setSleepTimer(minutes)
     fun cancelSleepTimer() = app.playback.cancelSleepTimer()
     fun sleepAtEndOfSong() = app.playback.setSleepAtEndOfSong()
     fun sleepAtEndOfQueue() = app.playback.setSleepAtEndOfQueue()
 
-    fun renamePlaylist(id: Long, title: String) = viewModelScope.launch {
-        if (title.isNotBlank()) repository.renamePlaylist(id, title)
-    }
-
-    fun updateCategory(id: Long, title: String, description: String) = viewModelScope.launch {
-        if (title.isNotBlank()) repository.updateCategory(id, title, description)
-    }
-
-    fun setCollectionArtwork(id: Long, uri: String?, playlist: Boolean) = viewModelScope.launch {
-        if (playlist) repository.setPlaylistArtwork(id, uri) else repository.setCategoryArtwork(id, uri)
-    }
-
+    fun renamePlaylist(id: Long, title: String) = viewModelScope.launch { if (title.isNotBlank()) repository.renamePlaylist(id, title) }
+    fun updateCategory(id: Long, title: String, description: String) = viewModelScope.launch { if (title.isNotBlank()) repository.updateCategory(id, title, description) }
+    fun setCollectionArtwork(id: Long, uri: String?, playlist: Boolean) = viewModelScope.launch { if (playlist) repository.setPlaylistArtwork(id, uri) else repository.setCategoryArtwork(id, uri) }
     fun playlistSongs(id: Long) = repository.playlistSongs(id)
     fun categorySongs(id: Long) = repository.categorySongs(id)
     fun removeFromPlaylist(id: Long, songId: Long) = viewModelScope.launch { repository.removeFromPlaylist(id, songId) }
     fun removeFromCategory(id: Long, songId: Long) = viewModelScope.launch { repository.removeFromCategory(id, songId) }
+    fun reorderCollection(id: Long, songIds: List<Long>, playlist: Boolean) = viewModelScope.launch { if (playlist) repository.reorderPlaylist(id, songIds) else repository.reorderCategory(id, songIds) }
 
-    fun reorderCollection(id: Long, songIds: List<Long>, playlist: Boolean) = viewModelScope.launch {
-        if (playlist) repository.reorderPlaylist(id, songIds) else repository.reorderCategory(id, songIds)
-    }
-
-    fun excludeFolder(path: String) = viewModelScope.launch {
-        repository.excludeFolder(path)
-        performRescan(settings.value.minDurationMs)
-    }
-
-    fun includeFolder(path: String) = viewModelScope.launch {
-        repository.includeFolder(path)
-        performRescan(settings.value.minDurationMs)
-    }
-
-    fun saveMetadata(song: SongEntity, title: String, artist: String, album: String, genre: String, year: Int) = viewModelScope.launch {
-        repository.saveMetadata(song, title, artist, album, genre, year)
-    }
+    fun excludeFolder(path: String) = viewModelScope.launch { repository.excludeFolder(path); performRescan(settings.value.minDurationMs) }
+    fun includeFolder(path: String) = viewModelScope.launch { repository.includeFolder(path); performRescan(settings.value.minDurationMs) }
+    fun saveMetadata(song: SongEntity, title: String, artist: String, album: String, genre: String, year: Int) = viewModelScope.launch { repository.saveMetadata(song, title, artist, album, genre, year) }
 
     fun lyrics(id: Long) = repository.lyrics(id)
     fun loadSidecarLyrics(id: Long) = viewModelScope.launch { repository.loadSidecarLyrics(id) }
-
-    fun saveLyrics(id: Long, text: String) = viewModelScope.launch {
-        repository.saveLyrics(LyricsEntity(id, text, synchronized = text.contains(Regex("\\[\\d+:\\d+"))))
-    }
-
+    fun saveLyrics(id: Long, text: String) = viewModelScope.launch { repository.saveLyrics(LyricsEntity(id, text, synchronized = text.contains(Regex("\\[\\d+:\\d+")))) }
     fun saveLyricsLayers(id: Long, original: String, translation: String, romanization: String) = viewModelScope.launch {
-        repository.saveLyrics(
-            LyricsEntity(
-                id,
-                original,
-                translation,
-                romanization,
-                synchronized = original.contains(Regex("\\[\\d+:\\d+"))
-            )
-        )
+        repository.saveLyrics(LyricsEntity(id, original, translation, romanization, synchronized = original.contains(Regex("\\[\\d+:\\d+"))))
     }
 
     fun fetchLyrics(id: Long) = viewModelScope.launch {
-        lyricsLoading.value = true
-        lyricsError.value = null
+        lyricsLoading.value = true; lyricsError.value = null
         try {
-            if (!repository.fetchLyrics(id)) lyricsError.value = "Lyrics provider returned no result"
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Throwable) {
-            lyricsError.value = error.message ?: error.javaClass.simpleName
-        } finally {
-            lyricsLoading.value = false
-        }
+            val mode = settings.value.lyricsMode.lowercase()
+            val success = when (mode) {
+                "offline" -> repository.fetchOfflineLyrics(id)
+                "online" -> if (settings.value.strictOfflineMode) false else repository.fetchOnlineLyrics(id)
+                else -> repository.fetchLyrics(id)
+            }
+            if (!success) lyricsError.value = when {
+                settings.value.strictOfflineMode && mode == "online" -> "Strict Offline Mode blocks online lyrics"
+                mode == "offline" -> "No local/sidecar lyrics found"
+                else -> "Lyrics provider returned no result"
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Throwable) { lyricsError.value = error.message ?: error.javaClass.simpleName }
+        finally { lyricsLoading.value = false }
     }
 
     fun setTheme(value: ThemeMode) = viewModelScope.launch { app.settings.setTheme(value) }
@@ -295,17 +237,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setLanguage(value: String) = viewModelScope.launch { app.settings.setLanguage(value) }
     fun setReduceMotion(value: Boolean) = viewModelScope.launch { app.settings.setReduceMotion(value) }
     fun setDynamicArtwork(value: Boolean) = viewModelScope.launch { app.settings.setDynamicArtwork(value) }
+    fun setRememberQueue(value: Boolean) = viewModelScope.launch { app.settings.setRememberQueue(value) }
+    fun setResumeLastSong(value: Boolean) = viewModelScope.launch { app.settings.setResumeLastSong(value) }
+    fun setDefaultSpeed(value: Float) = viewModelScope.launch { app.settings.setDefaultSpeed(value.coerceIn(.25f, 3f)) }
 
     fun setMinDuration(value: Long) {
         val safe = value.coerceAtLeast(0L)
         viewModelScope.launch { app.settings.setMinDuration(safe) }
         minDurationRescanJob?.cancel()
-        minDurationRescanJob = viewModelScope.launch {
-            delay(450L)
-            performRescan(safe)
-        }
+        minDurationRescanJob = viewModelScope.launch { delay(450L); performRescan(safe) }
     }
-
     fun setLyricsMode(value: String) = viewModelScope.launch { app.settings.setLyricsMode(value) }
     fun setLyricsFontSize(value: Int) = viewModelScope.launch { app.settings.setLyricsFontSize(value) }
 
@@ -314,37 +255,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         effectsPersistJob?.cancel()
         effectsPersistJob = viewModelScope.launch {
             delay(140L)
-            if (playback.value.current?.mediaId?.toLongOrNull() == id) {
-                repository.saveTrackEffects(app.audioEffects.snapshot(id))
-            }
+            if (playback.value.current?.mediaId?.toLongOrNull() == id) repository.saveTrackEffects(app.audioEffects.snapshot(id))
         }
     }
-
-    fun setAudioPreset(value: String) {
-        app.audioEffects.applyPreset(value)
-        persistTrackEffects()
-    }
-
-    fun setBass(value: Int) {
-        app.audioEffects.setBass(value)
-        persistTrackEffects()
-    }
-
-    fun setVirtualizer(value: Int) {
-        app.audioEffects.setVirtualizer(value)
-        persistTrackEffects()
-    }
-
-    fun setLoudness(value: Int) {
-        app.audioEffects.setLoudness(value)
-        persistTrackEffects()
-    }
-
-    fun setEqualizerBand(index: Int, value: Short) {
-        app.audioEffects.setBand(index, value)
-        persistTrackEffects()
-    }
-
+    fun setAudioPreset(value: String) { app.audioEffects.applyPreset(value); persistTrackEffects() }
+    fun setBass(value: Int) { app.audioEffects.setBass(value); persistTrackEffects() }
+    fun setVirtualizer(value: Int) { app.audioEffects.setVirtualizer(value); persistTrackEffects() }
+    fun setLoudness(value: Int) { app.audioEffects.setLoudness(value); persistTrackEffects() }
+    fun setEqualizerBand(index: Int, value: Short) { app.audioEffects.setBand(index, value); persistTrackEffects() }
     fun clearHistory() = viewModelScope.launch { repository.clearHistory() }
 
     private companion object {

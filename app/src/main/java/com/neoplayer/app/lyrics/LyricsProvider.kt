@@ -1,12 +1,12 @@
 package com.neoplayer.app.lyrics
 
 import com.neoplayer.app.data.SongEntity
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 data class LyricsPayload(
     val original: String,
@@ -39,15 +39,19 @@ class ConfiguredJsonLyricsProvider(private val baseUrl: String, private val apiK
             val json = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
             val original = json.optString("syncedLyrics").ifBlank { json.optString("plainLyrics") }.ifBlank { json.optString("original") }
             if (original.isBlank()) null else LyricsPayload(original, json.optString("translation"), json.optString("romanization"), original.contains(Regex("\\[\\d+:\\d+")), id)
-        } finally {
-            connection.disconnect()
-        }
+        } finally { connection.disconnect() }
     }
 }
 
+/** Runtime network kill-switch used by Strict Offline Mode. Provider configuration is retained. */
 class LyricsProviderRegistry(private val providers: List<LyricsProvider>) {
-    val available: Boolean get() = providers.isNotEmpty()
+    @Volatile private var networkEnabled: Boolean = true
+    val available: Boolean get() = networkEnabled && providers.isNotEmpty()
+    val configured: Boolean get() = providers.isNotEmpty()
+    fun setNetworkEnabled(value: Boolean) { networkEnabled = value }
+
     suspend fun find(song: SongEntity): LyricsPayload? {
+        if (!networkEnabled) return null
         providers.forEach { provider -> runCatching { provider.find(song) }.getOrNull()?.let { return it } }
         return null
     }

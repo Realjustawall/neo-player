@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -34,13 +35,16 @@ class MediaStoreScanner(private val context: Context) {
         }
 
         val resolver = context.contentResolver
+        // A null cursor means MediaStore failed to answer (provider restart, permission transition,
+        // vendor bug, etc.), not that the user's music library is truly empty. Throw so the
+        // repository keeps the last good Room snapshot instead of replacing it with zero songs.
         val cursor = resolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection.toTypedArray(),
             "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= ?",
             arrayOf(minDurationMs.coerceAtLeast(0L).toString()),
             null
-        ) ?: return@withContext emptyList()
+        ) ?: throw IOException("MediaStore audio query returned null")
 
         cursor.use { c ->
             // Resolve indexes once. getColumnIndex() inside the row loop is surprisingly expensive
