@@ -1,12 +1,12 @@
 package com.neoplayer.app.data
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
-import androidx.paging.PagingSource
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -17,6 +17,7 @@ interface MusicDao {
     fun search(query: String): Flow<List<SongEntity>>
     @Query("SELECT * FROM songs WHERE id = :id") suspend fun song(id: Long): SongEntity?
     @Query("SELECT * FROM songs WHERE id IN (:ids)") suspend fun songsByIds(ids: List<Long>): List<SongEntity>
+    @Query("SELECT * FROM songs") suspend fun songSnapshot(): List<SongEntity>
     @Query("SELECT album, artist, albumId, COUNT(*) AS songCount, SUM(durationMs) AS durationMs FROM songs GROUP BY albumId, album ORDER BY album COLLATE NOCASE") fun albums(): Flow<List<AlbumSummary>>
     @Query("SELECT artist, COUNT(*) AS songCount, COUNT(DISTINCT albumId) AS albumCount FROM songs GROUP BY artist ORDER BY artist COLLATE NOCASE") fun artists(): Flow<List<ArtistSummary>>
     @Query("SELECT genre, COUNT(*) AS songCount FROM songs WHERE genre != '' GROUP BY genre ORDER BY genre COLLATE NOCASE") fun genres(): Flow<List<GenreSummary>>
@@ -25,6 +26,7 @@ interface MusicDao {
     @Query("SELECT * FROM songs WHERE artist = :artist ORDER BY album, discNumber, trackNumber") fun artistSongs(artist: String): Flow<List<SongEntity>>
     @Upsert suspend fun upsertSongs(songs: List<SongEntity>)
     @Query("DELETE FROM songs") suspend fun clearSongs()
+    @Query("DELETE FROM songs WHERE id IN (:ids)") suspend fun deleteSongsByIds(ids: List<Long>)
 
     @Query("SELECT songId FROM favorites") fun favoriteIds(): Flow<List<Long>>
     @Query("SELECT EXISTS(SELECT 1 FROM favorites WHERE songId = :id)") suspend fun isFavorite(id: Long): Boolean
@@ -59,7 +61,13 @@ interface MusicDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveLyrics(value: LyricsEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveHistory(value: ListeningHistoryEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun ensureHistory(value: ListeningHistoryEntity)
     @Query("SELECT * FROM listening_history WHERE songId = :songId") suspend fun history(songId: Long): ListeningHistoryEntity?
+    @Query("UPDATE listening_history SET playCount = playCount + 1, totalListeningMs = totalListeningMs + :listenedMs, lastPlayedAt = :at WHERE songId = :songId")
+    suspend fun incrementPlay(songId: Long, listenedMs: Long, at: Long)
+    @Query("UPDATE listening_history SET totalListeningMs = totalListeningMs + :listenedMs, lastPlayedAt = :at WHERE songId = :songId")
+    suspend fun incrementListeningTime(songId: Long, listenedMs: Long, at: Long)
+    @Query("UPDATE listening_history SET skipCount = skipCount + 1 WHERE songId = :songId") suspend fun incrementSkip(songId: Long)
     @Query("DELETE FROM listening_history") suspend fun clearHistory()
     @Query("SELECT * FROM listening_history ORDER BY lastPlayedAt DESC") fun histories(): Flow<List<ListeningHistoryEntity>>
     @Query("SELECT * FROM track_audio_effects WHERE songId = :songId") suspend fun trackEffects(songId: Long): TrackAudioEffectsEntity?
@@ -77,8 +85,65 @@ interface MusicDao {
     @Query("UPDATE category_songs SET position = :position WHERE categoryId = :categoryId AND songId = :songId") suspend fun setCategoryPosition(categoryId: Long, songId: Long, position: Int)
 
     @Transaction
+    suspend fun addPlaylistSongs(playlistId: Long, songIds: List<Long>) {
+        var position = nextPlaylistPosition(playlistId)
+        songIds.distinct().forEach { songId -> addPlaylistSong(PlaylistSongEntity(playlistId, songId, position++)) }
+    }
+
+    @Transaction
+    suspend fun addCategorySongs(categoryId: Long, songIds: List<Long>) {
+        var position = nextCategoryPosition(categoryId)
+        songIds.distinct().forEach { songId -> addCategorySong(CategorySongEntity(categoryId, songId, position++)) }
+    }
+
+    @Transaction
+    suspend fun reorderPlaylistPositions(playlistId: Long, songIds: List<Long>) {
+        songIds.forEachIndexed { index, songId -> setPlaylistPosition(playlistId, songId, index) }
+    }
+
+    @Transaction
+    suspend fun reorderCategoryPositions(categoryId: Long, songIds: List<Long>) {
+        songIds.forEachIndexed { index, songId -> setCategoryPosition(categoryId, songId, index) }
+    }
+
+    @Transaction
+    suspend fun recordPlayAtomic(songId: Long, listenedMs: Long, at: Long) {
+        ensureHistory(ListeningHistoryEntity(songId))
+        incrementPlay(songId, listenedMs.coerceAtLeast(0L), at)
+    }
+
+    @Transaction
+    suspend fun addListeningTimeAtomic(songId: Long, listenedMs: Long, at: Long) {
+        ensureHistory(ListeningHistoryEntity(songId))
+        incrementListeningTime(songId, listenedMs.coerceAtLeast(0L), at)
+    }
+
+    @Transaction
+    suspend fun recordSkipAtomic(songId: Long) {
+        ensureHistory(ListeningHistoryEntity(songId))
+        incrementSkip(songId)
+    }
+
+    /**
+     * Incremental library replacement. A full DELETE+INSERT invalidates every observing query and
+     * briefly exposes an empty library, which becomes visible jank on large collections.
+     */
+    @Transaction
     suspend fun replaceLibrary(values: List<SongEntity>) {
-        clearSongs()
-        if (values.isNotEmpty()) upsertSongs(values)
+        if (values.isEmpty()) {
+            clearSongs()
+            return
+        }
+        val existing = songSnapshot()
+        val existingById = existing.associateBy { it.id }
+        val incomingIds = values.asSequence().map { it.id }.toHashSet()
+        val changed = values.filter { existingById[it.id] != it }
+        if (changed.isNotEmpty()) upsertSongs(changed)
+
+        existing.asSequence()
+            .map { it.id }
+            .filterNot(incomingIds::contains)
+            .chunked(800)
+            .forEach { ids -> if (ids.isNotEmpty()) deleteSongsByIds(ids) }
     }
 }
