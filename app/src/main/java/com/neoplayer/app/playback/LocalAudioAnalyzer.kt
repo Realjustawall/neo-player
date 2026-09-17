@@ -10,6 +10,7 @@ import com.neoplayer.app.data.SongEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import java.nio.ByteOrder
 import kotlin.coroutines.coroutineContext
 import kotlin.math.abs
@@ -56,6 +57,7 @@ class LocalAudioAnalyzer(private val context: Context) {
             var peak = 0.0
             var inputDone = false
             var outputDone = false
+            var decodedBuffers = 0
             val info = MediaCodec.BufferInfo()
 
             val energyWindows = ArrayList<Double>(4096)
@@ -92,7 +94,7 @@ class LocalAudioAnalyzer(private val context: Context) {
                         channels = outputFormat.getIntegerOrDefault(MediaFormat.KEY_CHANNEL_COUNT, channels).coerceAtLeast(1)
                         targetWindowSamples = max(1, sampleRate * channels * ENERGY_WINDOW_MS / 1000)
                     }
-                    MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> yield()
                     else -> if (outputIndex >= 0) {
                         val output = codec.getOutputBuffer(outputIndex)
                         if (output != null && info.size > 0) {
@@ -116,6 +118,9 @@ class LocalAudioAnalyzer(private val context: Context) {
                         }
                         outputDone = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                         codec.releaseOutputBuffer(outputIndex, false)
+                        decodedBuffers++
+                        // Decoding is CPU-heavy even off-main. Cooperative yields keep audio/UI work responsive.
+                        if (decodedBuffers % YIELD_EVERY_BUFFERS == 0) yield()
                     }
                 }
             }
@@ -184,6 +189,7 @@ class LocalAudioAnalyzer(private val context: Context) {
         const val MIN_BPM = 60
         const val MAX_BPM = 200
         const val CODEC_TIMEOUT_US = 10_000L
-        const val MAX_ANALYSIS_US = 180_000_000L
+        const val MAX_ANALYSIS_US = 120_000_000L
+        const val YIELD_EVERY_BUFFERS = 8
     }
 }
