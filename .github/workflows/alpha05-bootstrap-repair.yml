@@ -24,39 +24,46 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Select exact part04 and reconstruct runtime ZIP
+      - name: Recover exact part04 and reconstruct runtime ZIP
         shell: bash
         run: |
           set -Eeuo pipefail
-          EXPECTED_PART04='5af312218b512e594e99673eb783d8aa50ef99894ae6c1f0a282c9c6fd552948'
-          EXPECTED_ZIP='489b45421fc9ac26fcdc0dbceae986aaa84a5c89d2624bced35ee45601d71340'
-          FIX=''
-          for f in .alpha05/runtime_parts/part04.b64 .alpha05/runtime_parts/fix04a.b64 .alpha05/runtime_parts/fix04b.b64 .alpha05/runtime_parts/fix04c.b64 .alpha05/runtime_parts/fix04d.b64; do
-            test -f "$f" || continue
-            SIZE="$(stat -c %s "$f")"
-            HASH="$(sha256sum "$f" | awk '{print $1}')"
-            echo "$f size=$SIZE sha256=$HASH"
-            if [ "$SIZE" -eq 12000 ] && [ "$HASH" = "$EXPECTED_PART04" ]; then
-              FIX="$f"
-            fi
-          done
-          test -n "$FIX"
-          echo "Verified replacement: $FIX"
-          {
-            cat .alpha05/runtime_parts/part00.b64
-            cat .alpha05/runtime_parts/part01.b64
-            cat .alpha05/runtime_parts/part02.b64
-            cat .alpha05/runtime_parts/part03.b64
-            cat "$FIX"
-            cat .alpha05/runtime_parts/part05.b64
-            cat .alpha05/runtime_parts/part06.b64
-            cat .alpha05/runtime_parts/part07.b64
-            cat .alpha05/runtime_parts/part08.b64
-            cat .alpha05/runtime_parts/part09.b64
-            cat .alpha05/runtime_parts/part10.b64
-            cat .alpha05/runtime_parts/part11.b64
-          } | base64 -d > /tmp/alpha05-runtime.zip
-          echo "$EXPECTED_ZIP  /tmp/alpha05-runtime.zip" | sha256sum -c -
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          path = Path('.alpha05/runtime_parts/part04.b64')
+          target = '5af312218b512e594e99673eb783d8aa50ef99894ae6c1f0a282c9c6fd552948'
+          data = path.read_bytes()
+          if len(data) == 12000 and hashlib.sha256(data).hexdigest() == target:
+              fixed = data
+              print('part04 already exact')
+          else:
+              if len(data) != 11999:
+                  raise SystemExit(f'unexpected part04 length: {len(data)}')
+              alphabet = b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+              fixed = None
+              for pos in range(len(data) + 1):
+                  left = data[:pos]
+                  right = data[pos:]
+                  for ch in alphabet:
+                      candidate = left + bytes((ch,)) + right
+                      if hashlib.sha256(candidate).hexdigest() == target:
+                          fixed = candidate
+                          print(f'recovered missing base64 character at offset {pos}: {chr(ch)}')
+                          break
+                  if fixed is not None:
+                      break
+              if fixed is None:
+                  raise SystemExit('unable to recover exact part04')
+              path.write_bytes(fixed)
+          assert len(fixed) == 12000
+          assert hashlib.sha256(fixed).hexdigest() == target
+          PY
+          test "$(stat -c %s .alpha05/runtime_parts/part04.b64)" -eq 12000
+          echo '5af312218b512e594e99673eb783d8aa50ef99894ae6c1f0a282c9c6fd552948  .alpha05/runtime_parts/part04.b64' | sha256sum -c -
+          cat .alpha05/runtime_parts/part{00..11}.b64 | base64 -d > /tmp/alpha05-runtime.zip
+          echo '489b45421fc9ac26fcdc0dbceae986aaa84a5c89d2624bced35ee45601d71340  /tmp/alpha05-runtime.zip' | sha256sum -c -
           test "$(stat -c %s /tmp/alpha05-runtime.zip)" -eq 106575
           unzip -t /tmp/alpha05-runtime.zip
 
