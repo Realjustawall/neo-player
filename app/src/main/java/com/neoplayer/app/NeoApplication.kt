@@ -8,22 +8,27 @@ import android.provider.MediaStore
 import com.neoplayer.app.data.MediaStoreScanner
 import com.neoplayer.app.data.MusicRepository
 import com.neoplayer.app.data.NeoDatabase
-import com.neoplayer.app.playback.PlaybackConnection
-import com.neoplayer.app.playback.AudioEffectsEngine
-import com.neoplayer.app.settings.SettingsRepository
 import com.neoplayer.app.lyrics.ConfiguredJsonLyricsProvider
 import com.neoplayer.app.lyrics.LyricsProviderRegistry
 import com.neoplayer.app.lyrics.SidecarLyricsLoader
+import com.neoplayer.app.playback.AudioEffectsEngine
+import com.neoplayer.app.playback.PlaybackConnection
+import com.neoplayer.app.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class NeoApplication : Application() {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var rescanJob: Job? = null
+    @Volatile private var currentMinDurationMs: Long = 10_000L
+
     lateinit var database: NeoDatabase
         private set
     lateinit var repository: MusicRepository
@@ -36,21 +41,64 @@ class NeoApplication : Application() {
         private set
     val audioEffects = AudioEffectsEngine()
 
+    private val mediaObserver by lazy {
+        object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                scheduleLibraryRefresh()
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         database = NeoDatabase.create(this)
         lyricsProviders = LyricsProviderRegistry(buildList {
-            if (BuildConfig.LYRICS_API_BASE.isNotBlank()) add(ConfiguredJsonLyricsProvider(BuildConfig.LYRICS_API_BASE, BuildConfig.LYRICS_API_KEY))
+            if (BuildConfig.LYRICS_API_BASE.isNotBlank()) {
+                add(ConfiguredJsonLyricsProvider(BuildConfig.LYRICS_API_BASE, BuildConfig.LYRICS_API_KEY))
+            }
         })
-        repository = MusicRepository(database.musicDao(), MediaStoreScanner(this), lyricsProviders, SidecarLyricsLoader(this))
+        repository = MusicRepository(
+            database.musicDao(),
+            MediaStoreScanner(this),
+            lyricsProviders,
+            SidecarLyricsLoader(this)
+        )
         settings = SettingsRepository(this)
         playback = PlaybackConnection(this)
         playback.connect()
-        contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) {
-                rescanJob?.cancel()
-                rescanJob = appScope.launch { delay(1_500); runCatching { repository.rescan() } }
-            }
-        })
+
+        appScope.launch {
+            settings.values
+                .map { it.minDurationMs }
+                .distinctUntilChanged()
+                .collect { currentMinDurationMs = it.coerceAtLeast(0L) }
+        }
+
+        contentResolver.registerContentObserver(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            true,
+            mediaObserver
+        )
+    }
+
+    private fun scheduleLibraryRefresh() {
+        rescanJob?.cancel()
+        rescanJob = appScope.launch {
+            // MediaStore often emits several mutations for one file operation. Collapse the burst.
+            delay(1_500L)
+            runCatching { repository.rescan(currentMinDurationMs) }
+        }
+    }
+
+    override fun onTerminate() {
+        // onTerminate is mainly useful for emulated processes, but keeping cleanup explicit also
+        // documents ownership and makes tests deterministic.
+        runCatching { contentResolver.unregisterContentObserver(mediaObserver) }
+        rescanJob?.cancel()
+        playback.release()
+        audioEffects.release()
+        database.close()
+        appScope.cancel()
+        super.onTerminate()
     }
 }
