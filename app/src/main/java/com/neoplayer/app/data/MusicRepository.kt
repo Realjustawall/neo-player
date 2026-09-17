@@ -91,6 +91,10 @@ class MusicRepository(
         scanned.size
     }
 
+    /** Direct MediaStore discovery intentionally ignores the current allow-list. */
+    suspend fun discoverSourceFolders(minDurationMs: Long = 10_000L): List<FolderSummary> =
+        scanner.scanFolders(minDurationMs.coerceAtLeast(0L))
+
     suspend fun toggleFavorite(id: Long) = if (dao.isFavorite(id)) dao.removeFavorite(id) else dao.addFavorite(FavoriteEntity(id))
     suspend fun toggleFavoriteCollection(type: String, key: String) = if (dao.isFavoriteCollection(type, key)) dao.removeFavoriteCollection(type, key) else dao.addFavoriteCollection(FavoriteCollectionEntity(type, key))
 
