@@ -1,0 +1,26 @@
+name: Alpha 0.5 Release Visibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ALPHA05_RELEASE_VISIBILITY_TRIGGER'
+
+permissions:
+  contents: write
+
+jobs:
+  publish-visible-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark Alpha 0.5 as visible latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          gh release edit v0.5.0-alpha \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "NEO PLAYER Alpha 0.5" \
+            --prerelease=false \
+            --latest
+          gh release view v0.5.0-alpha --repo "$GITHUB_REPOSITORY" --json tagName,name,isPrerelease,isLatest,url
