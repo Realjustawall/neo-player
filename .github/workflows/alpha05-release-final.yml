@@ -5,6 +5,10 @@ on:
     branches: ['alpha0.5']
     paths-ignore:
       - 'ALPHA05_BUILD_RESULT.txt'
+      - '.alpha05/runtime_parts/**'
+      - '.alpha05/overlay-v2.b64'
+      - 'ALPHA05_LOCAL_OVERLAY_TRIGGER'
+      - 'ALPHA05_CHUNKS_READY'
   workflow_dispatch:
 
 permissions:
