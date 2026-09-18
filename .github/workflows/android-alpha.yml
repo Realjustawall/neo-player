@@ -18,7 +18,7 @@ concurrency:
 jobs:
   verify-and-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -29,50 +29,82 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK 35
+      - name: Install Android SDK 36
+        shell: bash
         run: |
+          set -Eeuo pipefail
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "platform-tools"
 
-      - name: Set up Gradle 8.9
+      - name: Set up Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.13'
 
-      - name: Test, lint, and assemble Alpha
-        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
-
-      - name: Select versioned artifact name
+      - name: Verify project versions
+        shell: bash
         run: |
-          if [[ "$GITHUB_REF" == "refs/tags/v0.1.0-alpha" ]]; then
-            echo "APK_FILE=NEO-PLAYER-Alpha-0.1.apk" >> "$GITHUB_ENV"
-            echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.1" >> "$GITHUB_ENV"
-            echo "RELEASE_TITLE=NEO PLAYER Alpha 0.1" >> "$GITHUB_ENV"
-          else
-            echo "APK_FILE=NEO-PLAYER-Alpha-0.3.apk" >> "$GITHUB_ENV"
-            echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.3" >> "$GITHUB_ENV"
-            echo "RELEASE_TITLE=NEO PLAYER Alpha 0.3" >> "$GITHUB_ENV"
-          fi
+          set -Eeuo pipefail
+          grep -q 'version "8.13.2"' build.gradle.kts
+          grep -q 'compileSdk = 36' app/build.gradle.kts
+          grep -q 'targetSdk = 36' app/build.gradle.kts
+          grep -q 'versionCode = 5' app/build.gradle.kts
+          grep -q 'versionName = "0.5.0-alpha"' app/build.gradle.kts
 
-      - name: Name installable APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk "$APK_FILE"
+      - name: Unit tests
+        run: gradle --no-daemon testDebugUnitTest
 
-      - name: Upload Alpha APK
+      - name: Lint Debug
+        run: gradle --no-daemon lintDebug
+
+      - name: Assemble installable Debug APK
+        run: gradle --no-daemon assembleDebug
+
+      - name: Assemble Release APK
+        run: gradle --no-daemon assembleRelease
+
+      - name: Name Alpha 0.5 artifacts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cp app/build/outputs/apk/debug/app-debug.apk NEO-PLAYER-Alpha-0.5-debug.apk
+          cp app/build/outputs/apk/release/app-release.apk NEO-PLAYER-Alpha-0.5-release-unsigned.apk
+          echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.5" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=NEO PLAYER Alpha 0.5" >> "$GITHUB_ENV"
+
+      - name: Verify Debug APK package metadata
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
+          "$AAPT" dump badging NEO-PLAYER-Alpha-0.5-debug.apk | tee debug-badging.txt
+          grep -q "package: name='com.neoplayer.app' versionCode='5' versionName='0.5.0-alpha'" debug-badging.txt
+
+      - name: Upload Alpha 0.5 APKs
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APK_ARTIFACT }}
-          path: ${{ env.APK_FILE }}
+          path: |
+            NEO-PLAYER-Alpha-0.5-debug.apk
+            NEO-PLAYER-Alpha-0.5-release-unsigned.apk
+            debug-badging.txt
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish tagged private release
+      - name: Publish tagged Alpha release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
+          set -Eeuo pipefail
           TAG="${GITHUB_REF#refs/tags/}"
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" "$APK_FILE" \
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" NEO-PLAYER-Alpha-0.5-debug.apk \
+              --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "$RELEASE_TITLE" \
               --notes-file CHANGELOG.md
