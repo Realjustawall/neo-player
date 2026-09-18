@@ -119,23 +119,16 @@ fun NeoUltimateApp(
     val themeOverride = profile?.takeIf { it.themeMode == "custom" && it.backgroundArgb != 0 }?.let {
         TrackThemeOverride(it.accentArgb, it.backgroundArgb, it.secondaryArgb)
     }
-    MaterialTheme {
-        CompositionLocalProvider(LocalTrackThemeOverride provides themeOverride) {
+    val inheritedActions = LocalNeoUxActions.current
+    CompositionLocalProvider(
+        LocalTrackThemeOverride provides themeOverride,
+        LocalNeoUxActions provides inheritedActions.copy(openTrackTools = { if (current != null) open = true })
+    ) {
         Box(Modifier.fillMaxSize()) {
             NeoCompleteApp(mainViewModel, plusViewModel)
-            if (current != null && !open) {
-                FloatingActionButton(
-                    onClick = { open = true },
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 42.dp).size(48.dp),
-                    shape = CircleShape
-                ) {
-                    Icon(Icons.Rounded.AutoAwesome, "Track+")
-                }
-            }
             if (open && current != null) {
                 TrackExperiencePanel(experienceViewModel) { open = false }
             }
-        }
         }
     }
 }

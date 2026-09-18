@@ -172,8 +172,9 @@ import java.io.File
 import java.util.Locale
 
 private enum class Destination(val label: Int, val icon: ImageVector) {
-    HOME(R.string.home, Icons.Rounded.Home), SEARCH(R.string.search, Icons.Rounded.Search),
-    LIBRARY(R.string.library, Icons.Rounded.LibraryMusic), SETTINGS(R.string.settings, Icons.Rounded.Settings)
+    HOME(R.string.home, Icons.Rounded.Home),
+    SEARCH(R.string.search, Icons.Rounded.Search),
+    LIBRARY(R.string.library, Icons.Rounded.LibraryMusic)
 }
 
 @Composable
@@ -223,8 +224,10 @@ private fun PermissionGate(vm: MainViewModel, content: @Composable () -> Unit) {
 private fun PlayerShell(vm: MainViewModel) {
     var destination by rememberSaveable { mutableStateOf(Destination.HOME) }
     var fullPlayer by rememberSaveable { mutableStateOf(false) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     val playback by vm.playback.collectAsState()
     val settings by vm.settings.collectAsState()
+    val ux = LocalNeoUxActions.current
     val snackbar = remember { SnackbarHostState() }
     val playbackError = playback.error?.let { stringResource(R.string.playback_error, it) }
     LaunchedEffect(playbackError) { playbackError?.let { snackbar.showSnackbar(it) } }
@@ -235,7 +238,12 @@ private fun PlayerShell(vm: MainViewModel) {
                 AnimatedVisibility(playback.current != null) { MiniPlayer(vm) { fullPlayer = true } }
                 NavigationBar {
                     Destination.entries.forEach { item ->
-                        NavigationBarItem(selected = destination == item, onClick = { destination = item }, icon = { Icon(item.icon, stringResource(item.label)) }, label = { Text(stringResource(item.label)) })
+                        NavigationBarItem(
+                            selected = destination == item,
+                            onClick = { destination = item },
+                            icon = { Icon(item.icon, stringResource(item.label)) },
+                            label = { Text(stringResource(item.label)) }
+                        )
                     }
                 }
             }
@@ -243,17 +251,29 @@ private fun PlayerShell(vm: MainViewModel) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (destination) {
-                Destination.HOME -> HomeScreen(vm)
+                Destination.HOME -> HomeScreen(vm) { settingsOpen = true }
                 Destination.SEARCH -> SearchScreen(vm)
-                Destination.LIBRARY -> LibraryScreen(vm)
-                Destination.SETTINGS -> SettingsScreen(vm)
+                Destination.LIBRARY -> LibraryScreen(vm, ux.openCollections)
             }
         }
     }
-    AnimatedVisibility(fullPlayer, enter = if (settings.reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(), exit = if (settings.reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut()) {
-        NowPlayingScreen(vm) { fullPlayer = false }
+    AnimatedVisibility(
+        fullPlayer,
+        enter = if (settings.reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
+        exit = if (settings.reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut()
+    ) { NowPlayingScreen(vm) { fullPlayer = false } }
+    AnimatedVisibility(
+        settingsOpen,
+        enter = if (settings.reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
+        exit = if (settings.reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut()
+    ) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            SettingsScreen(vm) { settingsOpen = false }
+        }
     }
-    BackHandler(fullPlayer) { fullPlayer = false }
+    BackHandler(fullPlayer || settingsOpen) {
+        if (settingsOpen) settingsOpen = false else fullPlayer = false
+    }
 }
 
 @Composable
@@ -268,7 +288,7 @@ private fun ScreenHeader(title: String, subtitle: String? = null, action: (@Comp
 }
 
 @Composable
-private fun HomeScreen(vm: MainViewModel) {
+private fun HomeScreen(vm: MainViewModel, openSettings: () -> Unit) {
     val songs by vm.songs.collectAsState()
     val favorites by vm.favoriteIds.collectAsState()
     val histories by vm.histories.collectAsState()
@@ -283,7 +303,11 @@ private fun HomeScreen(vm: MainViewModel) {
     val forgotten = remember(songs, favorites, histories) { SmartMixEngine.forgottenFavorites(songs, favorites.toSet(), histories).take(8) }
     val dayMix = remember(songs, favorites, hour) { SmartMixEngine.timeOfDay(songs, favorites.toSet(), hour).take(8) }
     LazyColumn(Modifier.fillMaxSize()) {
-        item { ScreenHeader(greeting, stringResource(R.string.your_music_stays_yours)) }
+        item {
+            ScreenHeader(greeting, stringResource(R.string.your_music_stays_yours), action = {
+                IconButton(openSettings) { Icon(Icons.Rounded.Settings, stringResource(R.string.settings)) }
+            })
+        }
         if (songs.isEmpty()) item { EmptyLibrary(vm) }
         else {
             item { SectionTitle(stringResource(R.string.recently_added)) }
@@ -344,43 +368,94 @@ private fun SearchScreen(vm: MainViewModel) {
     val categories by vm.categories.collectAsState()
     val folders by vm.folders.collectAsState()
     var filter by rememberSaveable { mutableStateOf("All") }
-    val filtered = remember(results, filter, query) { if (query.isBlank()) emptyList() else when (filter) {
-        "Songs" -> results
-        "Artists" -> results.filter { it.artist.contains(query, ignoreCase = true) }
-        "Albums" -> results.filter { it.album.contains(query, ignoreCase = true) }
-        "Genres" -> results.filter { it.genre.contains(query, ignoreCase = true) }
-        else -> results
-    } }
+    val filtered = remember(results, filter, query) {
+        when {
+            query.isBlank() && (filter == "All" || filter == "Songs") -> results
+            query.isBlank() -> emptyList()
+            filter == "Songs" -> results
+            filter == "Artists" -> results.filter { it.artist.contains(query, ignoreCase = true) }
+            filter == "Albums" -> results.filter { it.album.contains(query, ignoreCase = true) }
+            filter == "Genres" -> results.filter { it.genre.contains(query, ignoreCase = true) }
+            else -> results
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(stringResource(R.string.search))
-        OutlinedTextField(query, { vm.query.value = it }, Modifier.fillMaxWidth().padding(horizontal = 20.dp), singleLine = true,
-            leadingIcon = { Icon(Icons.Rounded.Search, null) }, placeholder = { Text(stringResource(R.string.search_hint)) },
-            trailingIcon = { if (query.isNotEmpty()) IconButton({ vm.query.value = "" }) { Icon(Icons.Rounded.Close, stringResource(R.string.clear)) } },
-            shape = RoundedCornerShape(20.dp))
+        OutlinedTextField(
+            query,
+            { vm.query.value = it },
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Rounded.Search, null) },
+            placeholder = { Text(stringResource(R.string.search_hint)) },
+            trailingIcon = {
+                if (query.isNotEmpty()) IconButton({ vm.query.value = "" }) {
+                    Icon(Icons.Rounded.Close, stringResource(R.string.clear))
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
         LazyRow(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            listOf("All" to R.string.library, "Songs" to R.string.songs, "Artists" to R.string.artists, "Albums" to R.string.albums, "Genres" to R.string.genres, "Playlists" to R.string.playlists, "Categories" to R.string.categories, "Folders" to R.string.folders).forEach { option ->
-                item { FilterChip(selected = filter == option.first, onClick = { filter = option.first }, label = { Text(stringResource(option.second)) }, modifier = Modifier.padding(end = 8.dp)) }
+            listOf(
+                "All" to R.string.library,
+                "Songs" to R.string.songs,
+                "Artists" to R.string.artists,
+                "Albums" to R.string.albums,
+                "Genres" to R.string.genres,
+                "Playlists" to R.string.playlists,
+                "Categories" to R.string.categories,
+                "Folders" to R.string.folders
+            ).forEach { option ->
+                item {
+                    FilterChip(
+                        selected = filter == option.first,
+                        onClick = { filter = option.first },
+                        label = { Text(stringResource(option.second)) },
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
             }
         }
-        LazyColumn(Modifier.fillMaxSize().padding(top = 10.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(top = 4.dp)) {
+            if (query.isBlank() && (filter == "All" || filter == "Songs")) {
+                item { SectionTitle(stringResource(R.string.songs)) }
+            }
             val playlistResults = if (query.isNotBlank() && (filter == "All" || filter == "Playlists")) playlists.filter { it.title.contains(query, true) || it.description.contains(query, true) } else emptyList()
             val categoryResults = if (query.isNotBlank() && (filter == "All" || filter == "Categories")) categories.filter { it.title.contains(query, true) || it.description.contains(query, true) } else emptyList()
             val folderResults = if (query.isNotBlank() && (filter == "All" || filter == "Folders")) folders.filter { it.relativePath.contains(query, true) } else emptyList()
-            if (query.isNotBlank() && filtered.isEmpty() && playlistResults.isEmpty() && categoryResults.isEmpty() && folderResults.isEmpty()) item { HintCard(stringResource(R.string.no_search_results)) }
-            items(playlistResults, key = { "playlist-${it.id}" }) { value -> LibraryFacetRow(Icons.Rounded.QueueMusic, value.title, stringResource(R.string.playlists), { vm.playPlaylist(value.id) }) }
-            items(categoryResults, key = { "category-${it.id}" }) { value -> LibraryFacetRow(Icons.Rounded.Category, value.title, stringResource(R.string.categories), { vm.playCategory(value.id) }) }
-            items(folderResults, key = { "folder-${it.relativePath}" }) { value -> LibraryFacetRow(Icons.Rounded.Folder, value.relativePath, stringResource(R.string.folders), { vm.songs.value.filter { it.relativePath == value.relativePath }.firstOrNull()?.let { vm.play(it, vm.songs.value.filter { song -> song.relativePath == value.relativePath }) } }) }
-            if (filter != "Playlists" && filter != "Categories" && filter != "Folders") items(filtered, key = { it.id }) { SongRow(it, favorites.contains(it.id), vm, filtered) }
+            if (query.isNotBlank() && filtered.isEmpty() && playlistResults.isEmpty() && categoryResults.isEmpty() && folderResults.isEmpty()) {
+                item { HintCard(stringResource(R.string.no_search_results)) }
+            }
+            items(playlistResults, key = { "playlist-${it.id}" }) { value ->
+                LibraryFacetRow(Icons.Rounded.QueueMusic, value.title, stringResource(R.string.playlists)) { vm.playPlaylist(value.id) }
+            }
+            items(categoryResults, key = { "category-${it.id}" }) { value ->
+                LibraryFacetRow(Icons.Rounded.Category, value.title, stringResource(R.string.categories)) { vm.playCategory(value.id) }
+            }
+            items(folderResults, key = { "folder-${it.relativePath}" }) { value ->
+                LibraryFacetRow(Icons.Rounded.Folder, value.relativePath, stringResource(R.string.folders)) {
+                    val tracks = vm.songs.value.filter { song -> song.relativePath == value.relativePath }
+                    tracks.firstOrNull()?.let { vm.play(it, tracks) }
+                }
+            }
+            if (filter != "Playlists" && filter != "Categories" && filter != "Folders") {
+                items(filtered, key = { it.id }) { SongRow(it, favorites.contains(it.id), vm, filtered) }
+            }
         }
     }
 }
 
 @Composable
-private fun LibraryScreen(vm: MainViewModel) {
+private fun LibraryScreen(vm: MainViewModel, openCollections: () -> Unit) {
     val labels = listOf(R.string.songs, R.string.albums, R.string.artists, R.string.genres, R.string.folders, R.string.playlists, R.string.categories)
     var tab by rememberSaveable { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader(stringResource(R.string.library), action = { IconButton(vm::rescan) { Icon(Icons.Rounded.Refresh, stringResource(R.string.rescan)) } })
+        ScreenHeader(stringResource(R.string.library), action = {
+            Row {
+                IconButton(openCollections) { Icon(Icons.Rounded.LibraryMusic, "Collections") }
+                IconButton(vm::rescan) { Icon(Icons.Rounded.Refresh, stringResource(R.string.rescan)) }
+            }
+        })
         LazyRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
             items(labels.size) { index ->
                 val selected = tab == index
@@ -637,7 +712,7 @@ private suspend fun embeddedArtwork(context: android.content.Context, sourceUri:
 private fun Artwork(uri: String?, modifier: Modifier = Modifier, sourceUri: String? = null, sizePx: Int = 256) {
     val context = LocalContext.current
     var embedded by remember(sourceUri) { mutableStateOf<String?>(null) }
-    LaunchedEffect(sourceUri) { embedded = embeddedArtwork(context, sourceUri) }
+    LaunchedEffect(sourceUri, uri) { embedded = if (uri.isNullOrBlank()) embeddedArtwork(context, sourceUri) else null }
     val imageData = embedded ?: uri
     val model = remember(imageData, sizePx) {
         ImageRequest.Builder(context).data(imageData).size(sizePx).crossfade(false)
@@ -673,29 +748,55 @@ private fun MiniPlayer(vm: MainViewModel, open: () -> Unit) {
 private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
     val state by vm.playback.collectAsState(); val item = state.current ?: return
     val settings by vm.settings.collectAsState()
-    var panel by remember { mutableStateOf("player") }; var verticalDrag by remember { mutableFloatStateOf(0f) }
+    val ux = LocalNeoUxActions.current
+    var panel by remember { mutableStateOf("player") }
+    var verticalDrag by remember { mutableFloatStateOf(0f) }
+    var moreMenu by remember { mutableStateOf(false) }
     LaunchedEffect(state.playing) { while (state.playing) { delay(500); vm.refreshPosition() } }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
-        if (settings.dynamicArtwork) AsyncImage(item.mediaMetadata.artworkUri, null, Modifier.fillMaxSize().blur(72.dp).alpha(.18f), contentScale = ContentScale.Crop)
-        Column(Modifier.fillMaxSize().padding(WindowInsets.statusBars.asPaddingValues())) {
-            Row(Modifier.fillMaxWidth().pointerInput(Unit) { detectVerticalDragGestures(onVerticalDrag = { _, delta -> verticalDrag += delta }, onDragEnd = { if (verticalDrag > 100) close(); verticalDrag = 0f }) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.minimize)) }
-                Text(stringResource(R.string.now_playing), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                IconButton({ panel = if (panel == "queue") "player" else "queue" }) { Icon(Icons.Rounded.QueueMusic, stringResource(R.string.queue)) }
-                IconButton({ panel = if (panel == "lyrics") "player" else "lyrics" }) { Icon(Icons.Rounded.Lyrics, stringResource(R.string.lyrics)) }
+            if (settings.dynamicArtwork) AsyncImage(item.mediaMetadata.artworkUri, null, Modifier.fillMaxSize().blur(72.dp).alpha(.18f), contentScale = ContentScale.Crop)
+            Column(Modifier.fillMaxSize().padding(WindowInsets.statusBars.asPaddingValues())) {
+                Row(
+                    Modifier.fillMaxWidth().pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onVerticalDrag = { _, delta -> verticalDrag += delta },
+                            onDragEnd = { if (verticalDrag > 100) close(); verticalDrag = 0f }
+                        )
+                    }.padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.minimize)) }
+                    Text(stringResource(R.string.now_playing), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    Box {
+                        IconButton({ moreMenu = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more)) }
+                        DropdownMenu(moreMenu, { moreMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Track tools") },
+                                onClick = { moreMenu = false; ux.openTrackTools() }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("NEO+") },
+                                onClick = { moreMenu = false; ux.openNeoPlus() }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Offline Pro") },
+                                onClick = { moreMenu = false; ux.openOfflinePro() }
+                            )
+                        }
+                    }
+                }
+                when (panel) {
+                    "queue" -> QueuePanel(vm)
+                    "lyrics" -> LyricsPanel(vm, item.mediaId.toLongOrNull() ?: -1, state.positionMs)
+                    else -> PlayerPanel(vm, openQueue = { panel = "queue" }, openLyrics = { panel = "lyrics" })
+                }
             }
-            when (panel) {
-                "queue" -> QueuePanel(vm)
-                "lyrics" -> LyricsPanel(vm, item.mediaId.toLongOrNull() ?: -1, state.positionMs)
-                else -> PlayerPanel(vm)
-            }
-        }
         }
     }
 }
 
-@Composable private fun PlayerPanel(vm: MainViewModel) {
+@Composable private fun PlayerPanel(vm: MainViewModel, openQueue: () -> Unit, openLyrics: () -> Unit) {
     val state by vm.playback.collectAsState(); val item = state.current ?: return
     val favorites by vm.favoriteIds.collectAsState(); val id = item.mediaId.toLongOrNull()
     var speedMenu by remember { mutableStateOf(false) }
@@ -721,6 +822,10 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
             FilledIconButton(vm::togglePlayback, Modifier.size(72.dp)) { Icon(if (state.playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, stringResource(R.string.play_pause), Modifier.size(42.dp)) }
             IconButton(vm::next, Modifier.size(58.dp)) { Icon(Icons.Rounded.SkipNext, stringResource(R.string.next), Modifier.size(38.dp)) }
             IconButton(vm::cycleRepeat) { Icon(if (state.repeatMode == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat, stringResource(R.string.repeat), tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(openLyrics) { Icon(Icons.Rounded.Lyrics, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.lyrics)) }
+            TextButton(openQueue) { Icon(Icons.Rounded.QueueMusic, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.queue)) }
         }
         Box {
             TextButton({ speedMenu = true }) { Icon(Icons.Rounded.Speed, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.playback_speed)) }
@@ -820,15 +925,24 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
     }
 }
 
-@Composable private fun SettingsScreen(vm: MainViewModel) {
+@Composable private fun SettingsScreen(vm: MainViewModel, close: (() -> Unit)? = null) {
     val settings by vm.settings.collectAsState(); var customDialog by remember { mutableStateOf(false) }; var clearHistory by remember { mutableStateOf(false) }
     val playback by vm.playback.collectAsState()
     val excluded by vm.excludedFolders.collectAsState()
     val audioEffects by vm.audioEffects.collectAsState()
     val context = LocalContext.current
     val equalizerIntent = remember { Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply { putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName); addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) } }
+    val ux = LocalNeoUxActions.current
     LazyColumn(Modifier.fillMaxSize()) {
-        item { ScreenHeader(stringResource(R.string.settings), stringResource(R.string.offline_by_design)) }
+        item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (close != null) IconButton(close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) }
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(stringResource(R.string.settings), style = MaterialTheme.typography.headlineMedium)
+                    Text(stringResource(R.string.offline_by_design), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
         item { SettingsTitle(stringResource(R.string.appearance)) }
         item { ChoiceRow(stringResource(R.string.theme_mode), listOf(stringResource(R.string.system), stringResource(R.string.theme_dark), stringResource(R.string.theme_light), stringResource(R.string.theme_amoled)), settings.themeMode.ordinal) { vm.setTheme(ThemeMode.entries[it]) } }
         item { Text(stringResource(R.string.accent_color), Modifier.padding(horizontal = 20.dp, vertical = 10.dp), fontWeight = FontWeight.SemiBold) }
@@ -846,6 +960,9 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
             val tag = listOf("system", "en", "fa")[index]; vm.setLanguage(tag)
             AppCompatDelegate.setApplicationLocales(if (tag == "system") LocaleListCompat.getEmptyLocaleList() else LocaleListCompat.forLanguageTags(tag))
         } }
+        item { SettingsTitle("NEO tools") }
+        item { SettingsAction(Icons.Rounded.Settings, "NEO+", "Advanced playlists, audio, library, search and cache", ux.openNeoPlus) }
+        item { SettingsAction(Icons.Rounded.MusicNote, "Offline Pro", "Offline backup, analysis, visual and strict-offline controls", ux.openOfflinePro) }
         item { SettingsTitle(stringResource(R.string.library)) }
         item { SettingsAction(Icons.Rounded.Refresh, stringResource(R.string.rescan), stringResource(R.string.rescan_summary), vm::rescan) }
         item { ChoiceRow(stringResource(R.string.minimum_audio_duration), listOf("0s", "10s", "30s", "60s"), listOf(0L, 10_000L, 30_000L, 60_000L).indexOf(settings.minDurationMs).coerceAtLeast(0)) { vm.setMinDuration(listOf(0L, 10_000L, 30_000L, 60_000L)[it]) } }

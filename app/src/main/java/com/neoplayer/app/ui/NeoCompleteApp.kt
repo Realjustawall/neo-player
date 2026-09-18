@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -64,18 +65,14 @@ import java.util.Locale
 @Composable
 fun NeoCompleteApp(mainViewModel: MainViewModel, plusViewModel: NeoPlusViewModel) {
     var organizerOpen by rememberSaveable { mutableStateOf(false) }
-    Box(Modifier.fillMaxSize()) {
-        NeoPlayerEnhancedApp(mainViewModel, plusViewModel)
-        if (!organizerOpen) {
-            FloatingActionButton(
-                onClick = { organizerOpen = true },
-                modifier = Modifier.align(Alignment.TopStart).padding(top = 42.dp, start = 10.dp).size(48.dp),
-                shape = CircleShape
-            ) {
-                Icon(Icons.Rounded.LibraryMusic, "Collections+")
-            }
+    val inheritedActions = LocalNeoUxActions.current
+    CompositionLocalProvider(
+        LocalNeoUxActions provides inheritedActions.copy(openCollections = { organizerOpen = true })
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            NeoPlayerEnhancedApp(mainViewModel, plusViewModel)
+            if (organizerOpen) CollectionOrganizer(plusViewModel) { organizerOpen = false }
         }
-        if (organizerOpen) CollectionOrganizer(plusViewModel) { organizerOpen = false }
     }
 }
 

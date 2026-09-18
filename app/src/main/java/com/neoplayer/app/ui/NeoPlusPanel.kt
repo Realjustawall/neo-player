@@ -59,6 +59,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -87,18 +88,14 @@ import kotlinx.coroutines.flow.Flow
 @Composable
 fun NeoPlayerEnhancedApp(mainViewModel: MainViewModel, plusViewModel: NeoPlusViewModel) {
     var open by rememberSaveable { mutableStateOf(false) }
-    Box(Modifier.fillMaxSize()) {
-        NeoPlayerApp(mainViewModel)
-        if (!open) {
-            FloatingActionButton(
-                onClick = { open = true },
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 42.dp, end = 10.dp).size(48.dp),
-                shape = CircleShape
-            ) {
-                Text("N+", fontWeight = FontWeight.Black)
-            }
+    val inheritedActions = LocalNeoUxActions.current
+    CompositionLocalProvider(
+        LocalNeoUxActions provides inheritedActions.copy(openNeoPlus = { open = true })
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            NeoPlayerApp(mainViewModel)
+            if (open) NeoPlusPanel(plusViewModel) { open = false }
         }
-        if (open) NeoPlusPanel(plusViewModel) { open = false }
     }
 }
 

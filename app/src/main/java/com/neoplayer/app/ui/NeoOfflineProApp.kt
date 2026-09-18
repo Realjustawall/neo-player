@@ -89,24 +89,21 @@ fun NeoOfflineProApp(
     experienceViewModel: TrackExperienceViewModel,
     proViewModel: OfflineProViewModel
 ) {
-    val song by proViewModel.currentSong.collectAsState()
+    val settings by mainViewModel.settings.collectAsState()
     val profile by proViewModel.currentProfile.collectAsState()
     val wallpaper = profile?.backgroundImageUri?.takeIf { it.isNotBlank() }?.let {
         TrackWallpaperOverride(it, profile!!.backgroundOpacity, profile!!.backgroundBlurDp)
     }
     var open by rememberSaveable { mutableStateOf(false) }
 
-    MaterialTheme {
-        CompositionLocalProvider(LocalTrackWallpaperOverride provides wallpaper) {
+    NeoTheme(settings) {
+        val inheritedActions = LocalNeoUxActions.current
+        CompositionLocalProvider(
+            LocalTrackWallpaperOverride provides wallpaper,
+            LocalNeoUxActions provides inheritedActions.copy(openOfflinePro = { open = true })
+        ) {
             Box(Modifier.fillMaxSize()) {
                 NeoUltimateApp(mainViewModel, plusViewModel, experienceViewModel)
-                if (!open) {
-                    FloatingActionButton(
-                        onClick = { open = true },
-                        modifier = Modifier.align(Alignment.CenterEnd).padding(end = 10.dp).size(48.dp),
-                        shape = CircleShape
-                    ) { Text("P+", fontWeight = FontWeight.Black) }
-                }
                 if (open) OfflineProPanel(proViewModel, plusViewModel) { open = false }
             }
         }
