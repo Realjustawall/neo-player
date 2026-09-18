@@ -132,11 +132,11 @@ android {
         applicationId = "com.neoplayer.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.5.0-alpha"
+        versionCode = 6
+        versionName = "0.6.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
-        buildConfigField("String", "DISPLAY_VERSION", "\"Alpha 0.5\"")
+        buildConfigField("String", "DISPLAY_VERSION", "\"0.6Alpha\"")
         buildConfigField("String", "LYRICS_API_BASE", quotedBuildValue(lyricsApiBase))
         buildConfigField("String", "LYRICS_API_KEY", quotedBuildValue(lyricsApiKey))
         buildConfigField("boolean", "SIGNED_RELEASE", hasReleaseSigning.toString())

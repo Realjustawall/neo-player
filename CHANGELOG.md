@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0-alpha — 0.6Alpha
+
+- reorganized the app into Spotify-style contextual UX: Home, Search, Your Library, Create, and Now Playing
+- moved track, playlist, library, cache, backup, offline, analysis, and visual tools into the context where users expect them
+- preserved all existing NEO+, Track+, and Offline Pro capabilities while removing scattered launcher-style entry points
+- made the selected light, dark, system, AMOLED, and accent theme propagate through menus, dialogs, sheets, panels, and system bars
+- made Search show the local song library immediately and filter in memory as the user types
+- verified unit tests, lint, Debug APK assembly, Release APK assembly, and package metadata before release promotion
+
 ## 0.3.0-alpha — Alpha 0.3
 
 - redesigned search with debounce, category filters, and bounded local results
