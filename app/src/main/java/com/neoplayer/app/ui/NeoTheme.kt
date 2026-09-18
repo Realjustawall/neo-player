@@ -1,10 +1,11 @@
 package com.neoplayer.app.ui
 
 import android.app.Activity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -19,8 +20,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import androidx.core.view.WindowCompat
+import coil.compose.AsyncImage
 import com.neoplayer.app.settings.Accent
 import com.neoplayer.app.settings.AppSettings
 import com.neoplayer.app.settings.ThemeMode
@@ -70,6 +71,63 @@ private fun mix(a: Color, b: Color, amount: Float): Color {
     )
 }
 
+/**
+ * Material 3 components use the newer surface-container roles heavily. Previously those roles kept
+ * the library defaults, so drawers, menus, sheets and side panels could look purple/gray even while
+ * the main screen was light, AMOLED, or using a custom accent. Fill every surface role from the
+ * same palette so the selected theme is genuinely global.
+ */
+private fun completeScheme(
+    base: ColorScheme,
+    dark: Boolean,
+    background: Color,
+    surface: Color,
+    accent: Color,
+    secondary: Color,
+    onSurface: Color
+): ColorScheme {
+    val toward = if (dark) Color.White else Color.Black
+    val inverse = if (dark) Color(0xFFF4F1ED) else Color(0xFF202020)
+    val onAccent = if (accent.luminance() > .52f) Color(0xFF111111) else Color.White
+    val onSecondary = if (secondary.luminance() > .52f) Color(0xFF111111) else Color.White
+    val primaryContainer = mix(background, accent, if (dark) .24f else .16f)
+    val secondaryContainer = mix(background, secondary, if (dark) .20f else .13f)
+    return base.copy(
+        primary = accent,
+        onPrimary = onAccent,
+        primaryContainer = primaryContainer,
+        onPrimaryContainer = onSurface,
+        inversePrimary = mix(accent, inverse, .28f),
+        secondary = secondary,
+        onSecondary = onSecondary,
+        secondaryContainer = secondaryContainer,
+        onSecondaryContainer = onSurface,
+        tertiary = secondary,
+        onTertiary = onSecondary,
+        tertiaryContainer = secondaryContainer,
+        onTertiaryContainer = onSurface,
+        background = background,
+        onBackground = onSurface,
+        surface = surface,
+        onSurface = onSurface,
+        surfaceVariant = mix(background, toward, if (dark) .12f else .07f),
+        onSurfaceVariant = onSurface.copy(alpha = if (dark) .74f else .68f),
+        surfaceTint = accent,
+        inverseSurface = inverse,
+        inverseOnSurface = if (dark) Color(0xFF292724) else Color(0xFFF5F2EE),
+        outline = onSurface.copy(alpha = .38f),
+        outlineVariant = onSurface.copy(alpha = .18f),
+        scrim = Color.Black,
+        surfaceDim = mix(background, toward, if (dark) .035f else .02f),
+        surfaceBright = mix(background, toward, if (dark) .16f else .045f),
+        surfaceContainerLowest = mix(background, toward, if (dark) .015f else .01f),
+        surfaceContainerLow = mix(background, toward, if (dark) .05f else .025f),
+        surfaceContainer = mix(background, toward, if (dark) .075f else .04f),
+        surfaceContainerHigh = mix(background, toward, if (dark) .105f else .055f),
+        surfaceContainerHighest = mix(background, toward, if (dark) .14f else .075f)
+    )
+}
+
 @Composable
 fun NeoTheme(settings: AppSettings, content: @Composable () -> Unit) {
     val track = LocalTrackThemeOverride.current
@@ -84,63 +142,37 @@ fun NeoTheme(settings: AppSettings, content: @Composable () -> Unit) {
     val accent = track?.accentArgb?.takeIf { it != 0 }?.let(::Color) ?: accentColor(settings)
     val secondary = track?.secondaryArgb?.takeIf { it != 0 }?.let(::Color) ?: accent
 
-    val scheme = if (track != null && backgroundOverride != null) {
-        val background = backgroundOverride
-        val onBackground = if (dark) Color(0xFFF7F4F0) else Color(0xFF171412)
-        val surface = mix(background, if (dark) Color.White else Color.Black, if (dark) .07f else .035f)
-        val variant = mix(background, if (dark) Color.White else Color.Black, if (dark) .14f else .08f)
-        if (dark) {
-            darkColorScheme(
-                primary = accent,
-                secondary = secondary,
-                onPrimary = if (accent.luminance() > .5f) Color(0xFF111111) else Color.White,
-                background = background,
-                surface = surface,
-                surfaceVariant = variant,
-                onBackground = onBackground,
-                onSurface = onBackground,
-                onSurfaceVariant = onBackground.copy(alpha = .72f)
-            )
-        } else {
-            lightColorScheme(
-                primary = accent,
-                secondary = secondary,
-                background = background,
-                surface = surface,
-                surfaceVariant = variant,
-                onBackground = onBackground,
-                onSurface = onBackground,
-                onSurfaceVariant = onBackground.copy(alpha = .68f)
-            )
-        }
-    } else if (dark) {
-        darkColorScheme(
-            primary = accent,
-            onPrimary = Color(0xFF16110D),
-            background = if (settings.themeMode == ThemeMode.AMOLED) Color.Black else Color(0xFF101010),
-            surface = if (settings.themeMode == ThemeMode.AMOLED) Color.Black else Color(0xFF181818),
-            surfaceVariant = Color(0xFF252525),
-            onBackground = Color(0xFFF6F3EF),
-            onSurface = Color(0xFFF6F3EF),
-            onSurfaceVariant = Color(0xFFBBB5AE)
-        )
-    } else {
-        lightColorScheme(
-            primary = accent,
-            background = Color(0xFFFFFBF7),
-            surface = Color.White,
-            surfaceVariant = Color(0xFFF0EAE4),
-            onBackground = Color(0xFF1C1917),
-            onSurface = Color(0xFF1C1917)
-        )
+    val background = backgroundOverride ?: when {
+        dark && settings.themeMode == ThemeMode.AMOLED -> Color.Black
+        dark -> Color(0xFF101010)
+        else -> Color(0xFFFFFBF7)
     }
+    val onSurface = if (dark) Color(0xFFF6F3EF) else Color(0xFF1C1917)
+    val surface = when {
+        backgroundOverride != null -> mix(background, if (dark) Color.White else Color.Black, if (dark) .07f else .035f)
+        dark && settings.themeMode == ThemeMode.AMOLED -> Color.Black
+        dark -> Color(0xFF181818)
+        else -> Color.White
+    }
+
+    val rawScheme = if (dark) darkColorScheme() else lightColorScheme()
+    val scheme = completeScheme(rawScheme, dark, background, surface, accent, secondary, onSurface)
+
     val effectiveScheme = if (wallpaper != null) {
         scheme.copy(
             background = scheme.background.copy(alpha = .84f),
             surface = scheme.surface.copy(alpha = .88f),
-            surfaceVariant = scheme.surfaceVariant.copy(alpha = .82f)
+            surfaceVariant = scheme.surfaceVariant.copy(alpha = .82f),
+            surfaceDim = scheme.surfaceDim.copy(alpha = .84f),
+            surfaceBright = scheme.surfaceBright.copy(alpha = .88f),
+            surfaceContainerLowest = scheme.surfaceContainerLowest.copy(alpha = .78f),
+            surfaceContainerLow = scheme.surfaceContainerLow.copy(alpha = .82f),
+            surfaceContainer = scheme.surfaceContainer.copy(alpha = .84f),
+            surfaceContainerHigh = scheme.surfaceContainerHigh.copy(alpha = .87f),
+            surfaceContainerHighest = scheme.surfaceContainerHighest.copy(alpha = .90f)
         )
     } else scheme
+
     val view = LocalView.current
     if (!view.isInEditMode) SideEffect {
         val window = (view.context as? Activity)?.window ?: return@SideEffect
