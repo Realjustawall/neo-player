@@ -31,7 +31,9 @@ jobs:
           gradle-version: '8.13'
 
       - name: Apply contextual UX patch
-        run: python3 .ux2/apply.py
+        run: |
+          python3 .ux2/apply.py
+          python3 .ux2/fix_escape.py
 
       - name: Compile Kotlin
         run: gradle --no-daemon :app:compileDebugKotlin
