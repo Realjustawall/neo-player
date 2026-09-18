@@ -115,26 +115,28 @@ fun NeoUltimateApp(
 ) {
     val current by experienceViewModel.currentSong.collectAsState()
     val profile by experienceViewModel.currentProfile.collectAsState()
-    var open by rememberSaveable { mutableStateOf(false) }
+    var open by remember { mutableStateOf<TrackToolsSection?>(null) }
     val themeOverride = profile?.takeIf { it.themeMode == "custom" && it.backgroundArgb != 0 }?.let {
         TrackThemeOverride(it.accentArgb, it.backgroundArgb, it.secondaryArgb)
     }
     val inheritedActions = LocalNeoUxActions.current
     CompositionLocalProvider(
         LocalTrackThemeOverride provides themeOverride,
-        LocalNeoUxActions provides inheritedActions.copy(openTrackTools = { if (current != null) open = true })
+        LocalNeoUxActions provides inheritedActions.copy(
+            openTrackTools = { section -> if (current != null) open = section }
+        )
     ) {
         Box(Modifier.fillMaxSize()) {
             NeoCompleteApp(mainViewModel, plusViewModel)
-            if (open && current != null) {
-                TrackExperiencePanel(experienceViewModel) { open = false }
+            open?.let { section ->
+                if (current != null) TrackExperiencePanel(experienceViewModel, section) { open = null }
             }
         }
     }
 }
 
 @Composable
-private fun TrackExperiencePanel(vm: TrackExperienceViewModel, close: () -> Unit) {
+private fun TrackExperiencePanel(vm: TrackExperienceViewModel, section: TrackToolsSection, close: () -> Unit) {
     val song by vm.currentSong.collectAsState()
     val profile by vm.currentProfile.collectAsState()
     val settings by vm.settings.collectAsState()
@@ -152,7 +154,11 @@ private fun TrackExperiencePanel(vm: TrackExperienceViewModel, close: () -> Unit
         surfaceVariant = blend(background, baseScheme.surfaceVariant, .35f)
     )
     val fa = settings.language == "fa" || (settings.language == "system" && Locale.getDefault().language == "fa")
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    val title = when (section) {
+        TrackToolsSection.VISUAL -> tx(fa, "Track appearance", "ظاهر آهنگ")
+        TrackToolsSection.LYRICS_AI -> tx(fa, "Lyrics AI", "متن هوشمند")
+        TrackToolsSection.RECOMMENDATIONS -> tx(fa, "More like this", "پیشنهادهای مشابه")
+    }
 
     MaterialTheme(colorScheme = scheme) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -164,7 +170,7 @@ private fun TrackExperiencePanel(vm: TrackExperienceViewModel, close: () -> Unit
                     Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Track+", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
                         Text(
                             song?.let { "${it.title} • ${it.artist}" } ?: tx(fa, "No track", "بدون آهنگ"),
                             maxLines = 1,
@@ -175,28 +181,11 @@ private fun TrackExperiencePanel(vm: TrackExperienceViewModel, close: () -> Unit
                     }
                     IconButton(close) { Icon(Icons.Rounded.Close, tx(fa, "Close", "بستن")) }
                 }
-                LazyRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    val tabs = listOf(
-                        Icons.Rounded.VideoLibrary to tx(fa, "Visual", "تصویر"),
-                        Icons.Rounded.Lyrics to tx(fa, "Lyrics AI", "متن هوشمند"),
-                        Icons.Rounded.Recommend to tx(fa, "For you", "پیشنهادها")
-                    )
-                    items(tabs.size) { index ->
-                        val item = tabs[index]
-                        FilterChip(
-                            selected = tab == index,
-                            onClick = { tab = index },
-                            leadingIcon = { Icon(item.first, null, Modifier.size(18.dp)) },
-                            label = { Text(item.second) },
-                            modifier = Modifier.padding(horizontal = 4.dp)
-                        )
-                    }
-                }
-                HorizontalDivider(Modifier.padding(top = 6.dp))
-                when (tab) {
-                    0 -> VisualTrackTab(vm, fa)
-                    1 -> OfflineLyricsTab(vm, fa)
-                    else -> RecommendationTab(vm, fa)
+                HorizontalDivider()
+                when (section) {
+                    TrackToolsSection.VISUAL -> VisualTrackTab(vm, fa)
+                    TrackToolsSection.LYRICS_AI -> OfflineLyricsTab(vm, fa)
+                    TrackToolsSection.RECOMMENDATIONS -> RecommendationTab(vm, fa)
                 }
             }
         }

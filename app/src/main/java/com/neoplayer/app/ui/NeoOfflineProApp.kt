@@ -94,64 +94,58 @@ fun NeoOfflineProApp(
     val wallpaper = profile?.backgroundImageUri?.takeIf { it.isNotBlank() }?.let {
         TrackWallpaperOverride(it, profile!!.backgroundOpacity, profile!!.backgroundBlurDp)
     }
-    var open by rememberSaveable { mutableStateOf(false) }
+    var open by remember { mutableStateOf<OfflineProSection?>(null) }
 
     NeoTheme(settings) {
         val inheritedActions = LocalNeoUxActions.current
         CompositionLocalProvider(
             LocalTrackWallpaperOverride provides wallpaper,
-            LocalNeoUxActions provides inheritedActions.copy(openOfflinePro = { open = true })
+            LocalNeoUxActions provides inheritedActions.copy(openOfflinePro = { section -> open = section })
         ) {
             Box(Modifier.fillMaxSize()) {
                 NeoUltimateApp(mainViewModel, plusViewModel, experienceViewModel)
-                if (open) OfflineProPanel(proViewModel, plusViewModel) { open = false }
+                open?.let { section -> OfflineProPanel(proViewModel, plusViewModel, section) { open = null } }
             }
         }
     }
 }
 
 @Composable
-private fun OfflineProPanel(vm: OfflineProViewModel, plusVm: NeoPlusViewModel, close: () -> Unit) {
+private fun OfflineProPanel(vm: OfflineProViewModel, plusVm: NeoPlusViewModel, section: OfflineProSection, close: () -> Unit) {
     val settings by vm.settings.collectAsState()
     val fa = settings.language == "fa" || (settings.language == "system" && Locale.getDefault().language == "fa")
-    var tab by rememberSaveable { mutableIntStateOf(0) }
-    val tabs = listOf(
-        Icons.Rounded.OfflineBolt to ptx(fa, "Offline Backup", "پشتیبان آفلاین"),
-        Icons.Rounded.GraphicEq to ptx(fa, "Analysis", "آنالیز"),
-        Icons.Rounded.Image to ptx(fa, "Visual Pro", "تصویر حرفه‌ای"),
-        Icons.Rounded.QueueMusic to ptx(fa, "Playlists+", "پلی‌لیست+"),
-        Icons.Rounded.Security to ptx(fa, "Offline mode", "حالت آفلاین")
-    )
+    val title = when (section) {
+        OfflineProSection.BACKUP -> ptx(fa, "Offline Backup", "پشتیبان آفلاین")
+        OfflineProSection.ANALYSIS -> ptx(fa, "Audio analysis", "آنالیز صدا")
+        OfflineProSection.VISUAL_PRO -> ptx(fa, "Advanced visuals", "تصویر حرفه‌ای")
+        OfflineProSection.PLAYLISTS -> ptx(fa, "Playlist tools", "ابزار پلی‌لیست")
+        OfflineProSection.OFFLINE_MODE -> ptx(fa, "Offline mode", "حالت آفلاین")
+    }
+    val subtitle = when (section) {
+        OfflineProSection.BACKUP -> ptx(fa, "Keep a smart local listening backup ready", "پشتیبان هوشمند محلی را آماده نگه دار")
+        OfflineProSection.ANALYSIS -> ptx(fa, "Deep on-device analysis for the current track or library", "آنالیز عمیق روی دستگاه برای آهنگ یا کتابخانه")
+        OfflineProSection.VISUAL_PRO -> ptx(fa, "Advanced visual profile for the current track", "پروفایل تصویری حرفه‌ای برای آهنگ فعلی")
+        OfflineProSection.PLAYLISTS -> ptx(fa, "Advanced playlist ordering and local tools", "ترتیب‌دهی و ابزار پیشرفته پلی‌لیست")
+        OfflineProSection.OFFLINE_MODE -> ptx(fa, "Network and local-only behavior", "رفتار شبکه و حالت کاملاً محلی")
+    }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("NEO Offline Pro", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-                    Text(ptx(fa, "Local-only advanced playback", "پخش پیشرفته کاملاً محلی"), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
                 IconButton(close) { Icon(Icons.Rounded.Close, ptx(fa, "Close", "بستن")) }
             }
-            LazyRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                items(tabs.size) { index ->
-                    val item = tabs[index]
-                    FilterChip(
-                        selected = tab == index,
-                        onClick = { tab = index },
-                        leadingIcon = { Icon(item.first, null, Modifier.size(18.dp)) },
-                        label = { Text(item.second) },
-                        modifier = Modifier.padding(horizontal = 3.dp)
-                    )
-                }
-            }
-            HorizontalDivider(Modifier.padding(top = 6.dp))
-            when (tab) {
-                0 -> BackupTab(vm, fa)
-                1 -> AnalysisTab(vm, fa)
-                2 -> VisualProTab(vm, fa)
-                3 -> PlaylistProTab(vm, fa)
-                else -> StrictOfflineTab(vm, plusVm, fa)
+            HorizontalDivider()
+            when (section) {
+                OfflineProSection.BACKUP -> BackupTab(vm, fa)
+                OfflineProSection.ANALYSIS -> AnalysisTab(vm, fa)
+                OfflineProSection.VISUAL_PRO -> VisualProTab(vm, fa)
+                OfflineProSection.PLAYLISTS -> PlaylistProTab(vm, fa)
+                OfflineProSection.OFFLINE_MODE -> StrictOfflineTab(vm, plusVm, fa)
             }
         }
     }

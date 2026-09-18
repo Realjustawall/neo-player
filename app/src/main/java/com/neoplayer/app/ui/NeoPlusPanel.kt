@@ -87,30 +87,36 @@ import kotlinx.coroutines.flow.Flow
  */
 @Composable
 fun NeoPlayerEnhancedApp(mainViewModel: MainViewModel, plusViewModel: NeoPlusViewModel) {
-    var open by rememberSaveable { mutableStateOf(false) }
+    var open by remember { mutableStateOf<NeoPlusSection?>(null) }
     val inheritedActions = LocalNeoUxActions.current
     CompositionLocalProvider(
-        LocalNeoUxActions provides inheritedActions.copy(openNeoPlus = { open = true })
+        LocalNeoUxActions provides inheritedActions.copy(openNeoPlus = { section -> open = section })
     ) {
         Box(Modifier.fillMaxSize()) {
             NeoPlayerApp(mainViewModel)
-            if (open) NeoPlusPanel(plusViewModel) { open = false }
+            open?.let { section -> NeoPlusPanel(plusViewModel, section) { open = null } }
         }
     }
 }
 
 @Composable
-private fun NeoPlusPanel(vm: NeoPlusViewModel, close: () -> Unit) {
+private fun NeoPlusPanel(vm: NeoPlusViewModel, section: NeoPlusSection, close: () -> Unit) {
     val settings by vm.settings.collectAsState()
     val fa = settings.language == "fa" || (settings.language == "system" && Locale.getDefault().language == "fa")
-    var tab by rememberSaveable { mutableIntStateOf(0) }
-    val labels = listOf(
-        t(fa, "Playlists", "پلی‌لیست‌ها"),
-        t(fa, "Audio", "صدا"),
-        t(fa, "Library", "کتابخانه"),
-        t(fa, "Search", "جستجو"),
-        t(fa, "Cache", "کش")
-    )
+    val title = when (section) {
+        NeoPlusSection.PLAYLISTS -> t(fa, "Playlist management", "مدیریت پلی‌لیست")
+        NeoPlusSection.AUDIO -> t(fa, "Playback & audio", "پخش و صدا")
+        NeoPlusSection.LIBRARY -> t(fa, "Library settings", "تنظیمات کتابخانه")
+        NeoPlusSection.SEARCH -> t(fa, "Search history & suggestions", "تاریخچه و پیشنهادهای جستجو")
+        NeoPlusSection.CACHE -> t(fa, "Storage & cache", "حافظه و کش")
+    }
+    val subtitle = when (section) {
+        NeoPlusSection.PLAYLISTS -> t(fa, "Folders, order, visibility and playlist layout", "پوشه‌ها، ترتیب، نمایش و چیدمان پلی‌لیست")
+        NeoPlusSection.AUDIO -> t(fa, "Normalization, AutoMix and transition controls", "نرمال‌سازی، اتومیکس و کنترل انتقال")
+        NeoPlusSection.LIBRARY -> t(fa, "Source folders, hidden tracks and library layout", "پوشه‌های منبع، آهنگ‌های مخفی و چیدمان کتابخانه")
+        NeoPlusSection.SEARCH -> t(fa, "Recent searches and local suggestions", "جستجوهای اخیر و پیشنهادهای محلی")
+        NeoPlusSection.CACHE -> t(fa, "Regeneratable local cache only", "فقط کش محلی قابل بازسازی")
+    }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize()) {
@@ -118,35 +124,21 @@ private fun NeoPlusPanel(vm: NeoPlusViewModel, close: () -> Unit) {
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Rounded.Settings, null)
+                Icon(Icons.Rounded.Settings, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("NEO+", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-                    Text(
-                        t(fa, "Advanced offline features • no account, no server", "قابلیت‌های پیشرفته آفلاین • بدون حساب و سرور"),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 12.sp
-                    )
+                    Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
                 IconButton(close) { Icon(Icons.Rounded.Close, t(fa, "Close", "بستن")) }
             }
-            LazyRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                items(labels.size) { index ->
-                    FilterChip(
-                        selected = tab == index,
-                        onClick = { tab = index },
-                        label = { Text(labels[index]) },
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
-                }
-            }
-            HorizontalDivider(Modifier.padding(top = 6.dp))
-            when (tab) {
-                0 -> PlaylistHub(vm, fa)
-                1 -> AudioHub(vm, fa)
-                2 -> LibraryHub(vm, fa)
-                3 -> SearchHub(vm, fa)
-                else -> CacheHub(vm, fa)
+            HorizontalDivider()
+            when (section) {
+                NeoPlusSection.PLAYLISTS -> PlaylistHub(vm, fa)
+                NeoPlusSection.AUDIO -> AudioHub(vm, fa)
+                NeoPlusSection.LIBRARY -> LibraryHub(vm, fa)
+                NeoPlusSection.SEARCH -> SearchHub(vm, fa)
+                NeoPlusSection.CACHE -> CacheHub(vm, fa)
             }
         }
     }

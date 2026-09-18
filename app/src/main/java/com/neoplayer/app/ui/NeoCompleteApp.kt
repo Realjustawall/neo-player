@@ -64,29 +64,29 @@ import java.util.Locale
  */
 @Composable
 fun NeoCompleteApp(mainViewModel: MainViewModel, plusViewModel: NeoPlusViewModel) {
-    var organizerOpen by rememberSaveable { mutableStateOf(false) }
+    var organizerOpen by remember { mutableStateOf<CollectionSection?>(null) }
     val inheritedActions = LocalNeoUxActions.current
     CompositionLocalProvider(
-        LocalNeoUxActions provides inheritedActions.copy(openCollections = { organizerOpen = true })
+        LocalNeoUxActions provides inheritedActions.copy(openCollections = { section -> organizerOpen = section })
     ) {
         Box(Modifier.fillMaxSize()) {
             NeoPlayerEnhancedApp(mainViewModel, plusViewModel)
-            if (organizerOpen) CollectionOrganizer(plusViewModel) { organizerOpen = false }
+            organizerOpen?.let { section -> CollectionOrganizer(plusViewModel, section) { organizerOpen = null } }
         }
     }
 }
 
 @Composable
-private fun CollectionOrganizer(vm: NeoPlusViewModel, close: () -> Unit) {
+private fun CollectionOrganizer(vm: NeoPlusViewModel, initial: CollectionSection, close: () -> Unit) {
     val settings by vm.settings.collectAsState()
     val fa = settings.language == "fa" || (settings.language == "system" && Locale.getDefault().language == "fa")
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var tab by rememberSaveable(initial) { mutableIntStateOf(initial.ordinal) }
     val labels = listOf(tx(fa, "Albums", "آلبوم‌ها"), tx(fa, "Artists", "هنرمندان"), tx(fa, "Playlist folders", "پوشه‌های پلی‌لیست"))
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(tx(fa, "Offline collections", "مجموعه‌های آفلاین"), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(tx(fa, "Organize Your Library", "سازمان‌دهی کتابخانه"), Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 IconButton(close) { Icon(Icons.Rounded.Close, tx(fa, "Close", "بستن")) }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
