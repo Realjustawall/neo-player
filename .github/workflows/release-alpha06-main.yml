@@ -311,8 +311,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "NEO PLAYER 0.6Alpha" \
-              --notes "$NOTES" \
-              --prerelease
+              --notes "$NOTES"
           fi
           gh release upload "$TAG" \
             candidate/NEO-PLAYER-0.6Alpha-release.apk \
@@ -325,5 +324,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "NEO PLAYER 0.6Alpha" \
             --latest \
-            --prerelease \
+            --prerelease=false \
             --notes "$NOTES"
