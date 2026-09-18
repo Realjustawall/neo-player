@@ -12,7 +12,7 @@ NEO PLAYER keeps the complete original player capability set while reorganizing 
 > [Open the v0.6.0-alpha release](https://github.com/Realjustawall/neo-player/releases/tag/v0.6.0-alpha)
 >
 > Release APK: **45,903,128 bytes**  
-> Release AAB: **22,764,210 bytes**
+> Release AAB: **22,764,208 bytes**
 
 ## 0.6Alpha highlights
 
@@ -205,7 +205,7 @@ Current release:
 Published release assets:
 
 - `NEO-PLAYER-0.6Alpha-release.apk` — **45,903,128 bytes**
-- `NEO-PLAYER-0.6Alpha-release.aab` — **22,764,210 bytes**
+- `NEO-PLAYER-0.6Alpha-release.aab` — **22,764,208 bytes**
 - `RELEASE_ALPHA06_BUILD.txt` — build/signature metadata
 - `INSTALL_ALPHA06_KVM_VERIFICATION.txt` — install/launch verification evidence
 
