@@ -70,8 +70,15 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          cp app/build/outputs/apk/debug/app-debug.apk NEO-PLAYER-Alpha-0.5-debug.apk
-          cp app/build/outputs/apk/release/app-release.apk NEO-PLAYER-Alpha-0.5-release-unsigned.apk
+          DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          RELEASE_APK="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          test -s "$DEBUG_APK"
+          test -n "$RELEASE_APK"
+          test -s "$RELEASE_APK"
+          echo "Debug APK: $DEBUG_APK"
+          echo "Release APK: $RELEASE_APK"
+          cp "$DEBUG_APK" NEO-PLAYER-Alpha-0.5-debug.apk
+          cp "$RELEASE_APK" NEO-PLAYER-Alpha-0.5-release-unsigned.apk
           echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.5" >> "$GITHUB_ENV"
           echo "RELEASE_TITLE=NEO PLAYER Alpha 0.5" >> "$GITHUB_ENV"
 
