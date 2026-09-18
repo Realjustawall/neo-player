@@ -51,8 +51,8 @@ jobs:
           grep -q 'version "8.13.2"' build.gradle.kts
           grep -q 'compileSdk = 36' app/build.gradle.kts
           grep -q 'targetSdk = 36' app/build.gradle.kts
-          grep -q 'versionCode = 5' app/build.gradle.kts
-          grep -q 'versionName = "0.5.0-alpha"' app/build.gradle.kts
+          grep -q 'versionCode = 6' app/build.gradle.kts
+          grep -q 'versionName = "0.6.0-alpha"' app/build.gradle.kts
 
       - name: Unit tests
         run: gradle --no-daemon testDebugUnitTest
@@ -66,7 +66,7 @@ jobs:
       - name: Assemble Release APK
         run: gradle --no-daemon assembleRelease
 
-      - name: Name Alpha 0.5 artifacts
+      - name: Name 0.6Alpha artifacts
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -77,26 +77,26 @@ jobs:
           test -s "$RELEASE_APK"
           echo "Debug APK: $DEBUG_APK"
           echo "Release APK: $RELEASE_APK"
-          cp "$DEBUG_APK" NEO-PLAYER-Alpha-0.5-debug.apk
-          cp "$RELEASE_APK" NEO-PLAYER-Alpha-0.5-release-unsigned.apk
-          echo "APK_ARTIFACT=NEO-PLAYER-Alpha-0.5" >> "$GITHUB_ENV"
-          echo "RELEASE_TITLE=NEO PLAYER Alpha 0.5" >> "$GITHUB_ENV"
+          cp "$DEBUG_APK" NEO-PLAYER-0.6Alpha-debug.apk
+          cp "$RELEASE_APK" NEO-PLAYER-0.6Alpha-release-unsigned.apk
+          echo "APK_ARTIFACT=NEO-PLAYER-0.6Alpha" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=NEO PLAYER 0.6Alpha" >> "$GITHUB_ENV"
 
       - name: Verify Debug APK package metadata
         shell: bash
         run: |
           set -Eeuo pipefail
           AAPT="$ANDROID_HOME/build-tools/36.0.0/aapt"
-          "$AAPT" dump badging NEO-PLAYER-Alpha-0.5-debug.apk | tee debug-badging.txt
-          grep -q "package: name='com.neoplayer.app' versionCode='5' versionName='0.5.0-alpha'" debug-badging.txt
+          "$AAPT" dump badging NEO-PLAYER-0.6Alpha-debug.apk | tee debug-badging.txt
+          grep -q "package: name='com.neoplayer.app' versionCode='6' versionName='0.6.0-alpha'" debug-badging.txt
 
-      - name: Upload Alpha 0.5 APKs
+      - name: Upload 0.6Alpha APKs
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APK_ARTIFACT }}
           path: |
-            NEO-PLAYER-Alpha-0.5-debug.apk
-            NEO-PLAYER-Alpha-0.5-release-unsigned.apk
+            NEO-PLAYER-0.6Alpha-debug.apk
+            NEO-PLAYER-0.6Alpha-release-unsigned.apk
             debug-badging.txt
           if-no-files-found: error
           retention-days: 30
@@ -110,11 +110,12 @@ jobs:
           set -Eeuo pipefail
           TAG="${GITHUB_REF#refs/tags/}"
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$TAG" NEO-PLAYER-Alpha-0.5-debug.apk \
+            gh release create "$TAG" NEO-PLAYER-0.6Alpha-debug.apk \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "$RELEASE_TITLE" \
-              --notes-file CHANGELOG.md
+              --notes-file CHANGELOG.md \
+              --prerelease
           fi
 
       - name: Upload lint report
