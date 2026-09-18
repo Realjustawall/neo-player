@@ -11,18 +11,20 @@ import com.neoplayer.app.data.SongEntity
 import com.neoplayer.app.settings.Accent
 import com.neoplayer.app.settings.AppSettings
 import com.neoplayer.app.settings.ThemeMode
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -50,8 +52,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val audioPresets get() = app.audioEffects.presets
 
     val query = MutableStateFlow("")
-    val results = query.debounce(220L).map(String::trim).distinctUntilChanged().flatMapLatest(repository::search)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Search is intentionally local and hot. The full library is available immediately when the
+     * Search destination opens, and every keystroke filters a pre-normalized in-memory index on a
+     * background dispatcher. This avoids the old debounce + Room round-trip and keeps typing fluid
+     * even for large local libraries.
+     */
+    private data class SearchEntry(val song: SongEntity, val haystack: String)
+    private val searchIndex = songs
+        .map { library ->
+            library.map { song ->
+                SearchEntry(
+                    song = song,
+                    haystack = buildString {
+                        append(song.title); append('\u0000')
+                        append(song.artist); append('\u0000')
+                        append(song.album); append('\u0000')
+                        append(song.genre); append('\u0000')
+                        append(song.relativePath)
+                    }.lowercase(Locale.ROOT)
+                )
+            }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val results = combine(searchIndex, query) { index, rawQuery ->
+        val terms = rawQuery.trim().lowercase(Locale.ROOT)
+            .split(' ')
+            .filter { it.isNotBlank() }
+        if (terms.isEmpty()) index.map { it.song }
+        else index.asSequence()
+            .filter { entry -> terms.all(entry.haystack::contains) }
+            .map { it.song }
+            .toList()
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val scanning = MutableStateFlow(false)
     val scanError = MutableStateFlow<String?>(null)
