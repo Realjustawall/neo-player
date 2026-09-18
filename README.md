@@ -2,16 +2,37 @@
 
 ![NEO PLAYER mark](app/src/main/res/drawable/ic_neo_mark.xml)
 
-**Alpha 0.5** (`0.5.0-alpha`, versionCode 5) — a modern local-first Android music player focused on offline playback, local intelligence, advanced transitions, per-track personalization, and privacy.
+**0.6Alpha** (`0.6.0-alpha`, versionCode 6) — a modern local-first Android music player focused on offline playback, local intelligence, advanced transitions, per-track personalization, privacy, and a contextual Spotify-style UX.
 
-NEO PLAYER keeps the complete original player surface and adds new capabilities on top of it. Existing library, queue, playlists, favorites, categories, lyrics, themes, audio effects, search, widget, playback controls, and collection tools remain available.
+NEO PLAYER keeps the complete original player capability set while reorganizing features into the context where they are expected: Home, Search, Your Library, Create, Now Playing, and Settings. Existing library, queue, playlists, favorites, categories, lyrics, themes, audio effects, search, widget, playback controls, collection tools, NEO+, Track+, and Offline Pro capabilities remain available.
 
-> Current public release: **v0.5.0-alpha**
+> Current public release: **v0.6.0-alpha — NEO PLAYER 0.6Alpha**
 >
-> Release APK: about **43.7 MiB**  
-> Release AAB: about **21.6 MiB**
+> [Download NEO-PLAYER-0.6Alpha-release.apk](https://github.com/Realjustawall/neo-player/releases/download/v0.6.0-alpha/NEO-PLAYER-0.6Alpha-release.apk)  
+> [Open the v0.6.0-alpha release](https://github.com/Realjustawall/neo-player/releases/tag/v0.6.0-alpha)
+>
+> Release APK: **45,903,128 bytes**  
+> Release AAB: **22,764,210 bytes**
 
-## Alpha 0.5 highlights
+## 0.6Alpha highlights
+
+### Contextual Spotify-style UX
+
+- Home, Search, Your Library, Create and Now Playing form the primary navigation and interaction model
+- track-specific actions are grouped in Now Playing rather than scattered across unrelated launchers
+- Track appearance, Lyrics AI, recommendations, audio analysis and advanced visuals are available from the current-track context
+- playlist management, playlist folders and advanced playlist tools are available from Your Library
+- Search history and suggestion controls are available from Search
+- library configuration, playback/audio controls, storage/cache, backup and Strict Offline controls are available from Settings
+- NEO+, Track+ and Offline Pro capabilities are preserved while their entry points are contextual instead of being separate feature dumps
+- Create provides playlist/category creation from the main navigation flow
+
+### Search and theme behavior
+
+- Search opens with the local song library immediately visible
+- typing filters a pre-normalized in-memory search index without issuing a database query for every keystroke
+- light, dark, system and AMOLED themes propagate through the app surface, dialogs, sheets, contextual panels and system bars
+- accent and per-track visual overrides remain available
 
 ### Playback and audio
 
@@ -51,7 +72,7 @@ NEO PLAYER keeps the complete original player surface and adds new capabilities 
 - optional **Full-Offline build** can still embed both Vosk models using `-PNEO_EMBED_VOSK_MODELS=true`
 - Strict Offline mode prevents model/provider network access when enabled
 
-### Offline-first Spotify-style features
+### Offline-first smart features
 
 - **Strict Offline Mode**
 - **Offline Backup** generated from local listening history, favorites, skips and recommendation signals
@@ -89,7 +110,7 @@ NEO PLAYER keeps the complete original player surface and adds new capabilities 
 
 ## Performance work
 
-Alpha 0.5 includes additive performance hardening across playback, library scanning, Room writes, queue persistence and UI state handling:
+0.6Alpha retains the performance hardening across playback, library scanning, Room writes, queue persistence and UI state handling:
 
 - timeline/queue state is not rebuilt on every position tick
 - seek callbacks are coalesced
@@ -107,12 +128,12 @@ Alpha 0.5 includes additive performance hardening across playback, library scann
 ## Architecture
 
 ```text
-Classic NEO UI
-  ├── library / search / playlists / categories / favorites
-  ├── player / queue / lyrics / settings
-  └── remains available under additive layers
+NEO UI
+  ├── Home / Search / Your Library / Create
+  ├── Now Playing / Queue / Lyrics / Settings
+  └── contextual feature entry points instead of scattered launchers
 
-NEO+ / Track+
+NEO+ / Track+ / Offline Pro
   ├── playlist folders, pins, hide/unhide, filters, M3U8
   ├── custom artwork/background/theme/Canvas
   ├── waveform / FFT / spectrum visualizers
@@ -179,22 +200,26 @@ The Full-Offline build is intentionally much larger. The normal Play-oriented Re
 
 Current release:
 
-**NEO PLAYER Alpha 0.5 — `v0.5.0-alpha`**
+**NEO PLAYER 0.6Alpha — `v0.6.0-alpha`**
 
-The validated normal Release build is approximately:
+Published release assets:
 
-- APK: **45,810,113 bytes / 43.688 MiB**
-- AAB: **22,659,587 bytes / 21.610 MiB**
+- `NEO-PLAYER-0.6Alpha-release.apk` — **45,903,128 bytes**
+- `NEO-PLAYER-0.6Alpha-release.aab` — **22,764,210 bytes**
+- `RELEASE_ALPHA06_BUILD.txt` — build/signature metadata
+- `INSTALL_ALPHA06_KVM_VERIFICATION.txt` — install/launch verification evidence
+
+The release candidate passed JVM unit tests, Android Lint, Release APK/AAB assembly, APK signature verification, 16 KiB zip-alignment verification, Android 14 / API 34 x86_64 KVM installation, app launch, and runtime process-health checks before publishing.
 
 Release builds use R8 code optimization with explicit keep rules for runtime-sensitive libraries such as Vosk/JNA/Room/Media3. Resource shrinking remains disabled.
 
-Optional production signing is supported through release signing environment/secrets. No private keystore or signing password is committed to the repository.
+Optional production signing is supported through release signing environment/secrets. No private keystore or signing password is committed to the repository. When production signing secrets are unavailable, the Alpha release pipeline uses the persistent Alpha test signing key for installable test releases.
 
 ## Database migration
 
 The current Room database version is **v6**. Migrations are additive and preserve existing user data. New tables/columns cover Track+ visuals, offline lyrics transcripts/models, recommendation feedback, advanced audio analysis, ReplayGain/normalization metadata and Offline Backup-related state.
 
-No destructive migration is used for the Alpha 0.5 upgrade path.
+No destructive migration is used for the 0.6Alpha upgrade path.
 
 ## Permissions and privacy
 
@@ -214,18 +239,18 @@ Local audio analysis, BPM/key/mood detection, FFT/waveform generation, ReplayGai
 
 ## Release rollback
 
-Before promoting Alpha 0.5 to `main`, a rollback branch was created:
+Before promoting 0.6Alpha to `main`, the previous Alpha 0.5 main was preserved as:
 
 ```text
-backup-main-before-alpha0.5-2026-09-17
-SHA: 3bd4b16ed7a81d9c786bfd009fb0382145b294b4
+backup-main-before-alpha0.6-2026-09-18
+SHA: 4a2573d98af42745f298ce18b0f54be32389605e
 ```
 
-This provides an exact restore point for the pre-Alpha-0.5 main branch.
+This provides an exact restore point for the pre-0.6Alpha main branch.
 
 ## Verification boundary
 
-CI verifies JVM unit tests, Android Lint, Room/KSP code generation, resource/manifest processing, Release APK assembly and Release AAB assembly. Device QA is still useful for manufacturer-specific codecs/audio effects, launcher widgets, Bluetooth/output-route transitions, large libraries, SD-card variants and dual-decoder behavior.
+CI verifies JVM unit tests, Android Lint, Room/KSP code generation, resource/manifest processing, Release APK assembly and Release AAB assembly. The 0.6Alpha release pipeline additionally verifies signing, 16 KiB zip alignment, real APK installation and application launch on an Android 14 / API 34 x86_64 KVM emulator. Physical-device QA is still useful for manufacturer-specific codecs/audio effects, launcher widgets, Bluetooth/output-route transitions, large libraries, SD-card variants and dual-decoder behavior.
 
 ## License and credits
 
