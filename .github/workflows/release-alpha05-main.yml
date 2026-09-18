@@ -160,6 +160,7 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$OUT_APK" | tee apk-badging.txt
           grep -q "package: name='com.neoplayer.app'" apk-badging.txt
           grep -q "versionCode='5'" apk-badging.txt
+          grep -q "versionName='0.5.0-alpha'" apk-badging.txt
           APK_BYTES="$(stat -c %s "$OUT_APK")"
           AAB_BYTES="$(stat -c %s "$OUT_AAB")"
           PREVIOUS_APK_BYTES=25039976
@@ -169,6 +170,8 @@ jobs:
           APK_MIB="$(awk -v b="$APK_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
           AAB_MIB="$(awk -v b="$AAB_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
           CERT_SHA256="$(grep -m1 'Signer #1 certificate SHA-256 digest:' apk-signature.txt | sed 's/.*: //')"
+          APK_SHA256="$(sha256sum "$OUT_APK" | awk '{print $1}')"
+          AAB_SHA256="$(sha256sum "$OUT_AAB" | awk '{print $1}')"
           cat > RELEASE_ALPHA05_BUILD.txt <<EOF
           TAG=v0.5.0-alpha
           BUILD_SHA=$GITHUB_SHA
@@ -177,8 +180,10 @@ jobs:
           VERSION_NAME=0.5.0-alpha
           APK_BYTES=$APK_BYTES
           APK_MIB=$APK_MIB
+          APK_SHA256=$APK_SHA256
           AAB_BYTES=$AAB_BYTES
           AAB_MIB=$AAB_MIB
+          AAB_SHA256=$AAB_SHA256
           SIGNING_MODE=$SIGNING_MODE
           APK_SIGNATURE_VERIFIED=true
           ZIPALIGN_16K_VERIFIED=true
@@ -199,14 +204,17 @@ jobs:
             apk-signature.txt
             apk-badging.txt
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
   install-verify:
-    name: Install and launch on Android emulator
+    name: Install and launch on Ubuntu KVM emulator
     needs: build-sign
-    runs-on: macos-15-intel
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Check out verification script
+        uses: actions/checkout@v4
+
       - name: Download signed candidate
         uses: actions/download-artifact@v4
         with:
@@ -219,49 +227,51 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install APK and launch app on hardware-accelerated emulator
+      - name: Enable KVM
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
+
+      - name: Install APK and launch app on KVM emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: google_apis
+          api-level: 34
+          target: default
           arch: x86_64
           cores: 2
+          ram-size: 2048M
+          heap-size: 512M
+          disk-size: 4096M
           disable-animations: true
-          emulator-boot-timeout: 600
-          script: |
-            set -Eeuo pipefail
-            adb wait-for-device
-            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
-            adb shell service check package | tee package-service.txt
-            grep -q 'package: found' package-service.txt
-            adb install --no-incremental -r "$GITHUB_WORKSPACE/candidate/NEO-PLAYER-Alpha-0.5-release.apk" | tee install-output.txt
-            grep -q 'Success' install-output.txt
-            adb shell pm path com.neoplayer.app | tee package-path.txt
-            grep -q 'package:' package-path.txt
-            adb shell dumpsys package com.neoplayer.app | grep -E 'versionCode=5|versionName=0.5.0-alpha' | tee package-version.txt
-            grep -q 'versionCode=5' package-version.txt
-            grep -q 'versionName=0.5.0-alpha' package-version.txt
-            adb shell am force-stop com.neoplayer.app
-            adb shell am start -W -n com.neoplayer.app/.MainActivity | tee launch-output.txt
-            grep -q 'Status: ok' launch-output.txt
-            sleep 5
-            PID="$(adb shell pidof com.neoplayer.app | tr -d '\r')"
-            test -n "$PID"
-            printf 'INSTALL_TEST=PASS\nEMULATOR=Android_15_API_35_google_apis_x86_64\nRUNNER=macos-15-intel\nPACKAGE=com.neoplayer.app\nVERSION_CODE=5\nVERSION_NAME=0.5.0-alpha\nPID=%s\n' "$PID" > INSTALL_ALPHA05_VERIFICATION.txt
-            cat INSTALL_ALPHA05_VERIFICATION.txt
+          disable-linux-hw-accel: false
+          emulator-boot-timeout: 420
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -no-metrics
+          script: bash "$GITHUB_WORKSPACE/.github/scripts/verify-alpha05-install.sh"
 
       - name: Upload install evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: alpha05-install-evidence
           path: |
-            INSTALL_ALPHA05_VERIFICATION.txt
+            INSTALL_ALPHA05_KVM_VERIFICATION.txt
+            runtime-result.txt
+            crash-summary.txt
+            logcat.txt
+            activity-processes.txt
+            exit-info.txt
             install-output.txt
             package-service.txt
             package-path.txt
             package-version.txt
             launch-output.txt
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
 
   publish:
@@ -288,8 +298,8 @@ jobs:
           set -Eeuo pipefail
           grep -q '^APK_SIGNATURE_VERIFIED=true$' candidate/RELEASE_ALPHA05_BUILD.txt
           grep -q '^ZIPALIGN_16K_VERIFIED=true$' candidate/RELEASE_ALPHA05_BUILD.txt
-          grep -q '^INSTALL_TEST=PASS$' evidence/INSTALL_ALPHA05_VERIFICATION.txt
-          cat evidence/INSTALL_ALPHA05_VERIFICATION.txt >> candidate/RELEASE_ALPHA05_BUILD.txt
+          grep -q '^INSTALL_TEST=PASS$' evidence/INSTALL_ALPHA05_KVM_VERIFICATION.txt
+          cat evidence/INSTALL_ALPHA05_KVM_VERIFICATION.txt >> candidate/RELEASE_ALPHA05_BUILD.txt
           cat candidate/RELEASE_ALPHA05_BUILD.txt
 
       - name: Replace GitHub Release assets only after real install passes
@@ -302,10 +312,12 @@ jobs:
             candidate/NEO-PLAYER-Alpha-0.5-release.apk \
             candidate/NEO-PLAYER-Alpha-0.5-release.aab \
             candidate/RELEASE_ALPHA05_BUILD.txt \
-            evidence/INSTALL_ALPHA05_VERIFICATION.txt \
+            evidence/INSTALL_ALPHA05_KVM_VERIFICATION.txt \
+            --repo "$GITHUB_REPOSITORY" \
             --clobber
           gh release edit v0.5.0-alpha \
+            --repo "$GITHUB_REPOSITORY" \
             --title "NEO PLAYER Alpha 0.5" \
             --latest \
             --prerelease=false \
-            --notes "Alpha 0.5 from main. The Release APK is cryptographically signed, verified by apksigner, 16 KiB zip-alignment checked, and successfully installed and launched on an Android 15 / API 35 emulator running on GitHub's macos-15-intel runner. If production signing secrets are configured they are used; otherwise the persistent Alpha test signing key is used. For Play Store publishing, configure the production upload/release signing key. Rollback branch: backup-main-before-alpha0.5-2026-09-17."
+            --notes "Alpha 0.5 from current main. The attached Release APK is cryptographically signed, verified by apksigner, 16 KiB zip-alignment checked, installed successfully with adb on an Android 14 / API 34 x86_64 KVM emulator, launched successfully, and remained alive for the runtime health check. If production signing secrets are configured they are used; otherwise the persistent Alpha test signing key is used. For Play Store publishing, configure the production upload/release signing key. Rollback branch: backup-main-before-alpha0.5-2026-09-17."
