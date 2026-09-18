@@ -25,13 +25,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Gradle 8.13
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+
       - name: Apply source patch
         run: python3 .uxfix/apply.py
 
       - name: Compile Kotlin
-        run: |
-          chmod +x gradlew
-          ./gradlew :app:compileDebugKotlin --no-daemon
+        run: gradle :app:compileDebugKotlin --no-daemon
 
       - name: Commit patched sources
         run: |
