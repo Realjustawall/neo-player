@@ -188,6 +188,8 @@
     <string name="current_line">خط جاری</string>
     <string name="time_mix">میکس متناسب با زمان</string>
     <string name="local_radio">رادیوی محلی</string>
+    <string name="queue_track_count">%1$d آهنگ</string>
+    <string name="queue_empty">صف پخش خالی است</string>
     <string name="local_radio_subtitle">شنیدن هم‌زمان روی دستگاه‌های نزدیک</string>
     <string name="host_local_radio">ساخت رادیو</string>
     <string name="local_radio_privacy">بلوتوث نشست نزدیک را اعلام می‌کند؛ صدا فقط روی وای‌فای یا هات‌اسپات محلی و با کلید امن QR پخش می‌شود.</string>

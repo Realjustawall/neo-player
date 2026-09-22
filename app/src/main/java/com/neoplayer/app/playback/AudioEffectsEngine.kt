@@ -12,10 +12,10 @@ import kotlin.math.pow
 
 data class AudioEffectsState(
     val available: Boolean = false,
-    val equalizerEnabled: Boolean = true,
-    val bassEnabled: Boolean = true,
-    val virtualizerEnabled: Boolean = true,
-    val loudnessEnabled: Boolean = true,
+    val equalizerEnabled: Boolean = false,
+    val bassEnabled: Boolean = false,
+    val virtualizerEnabled: Boolean = false,
+    val loudnessEnabled: Boolean = false,
     val preset: String = "Normal",
     val bass: Int = 0,
     val virtualizer: Int = 0,
@@ -59,9 +59,9 @@ class AudioEffectsEngine {
     fun applyProfile(profile: TrackAudioEffectsEntity) {
         _state.value = _state.value.copy(
             equalizerEnabled = profile.equalizerEnabled,
-            bassEnabled = profile.bassEnabled,
-            virtualizerEnabled = profile.virtualizerEnabled,
-            loudnessEnabled = profile.loudnessEnabled
+            bassEnabled = profile.equalizerEnabled && profile.bassEnabled,
+            virtualizerEnabled = profile.equalizerEnabled && profile.virtualizerEnabled,
+            loudnessEnabled = profile.equalizerEnabled && profile.loudnessEnabled
         )
         val bands = profile.bandLevels.split(",").mapNotNull { it.toShortOrNull() }
         if (profile.preset == "Custom" && bands.isNotEmpty()) {
@@ -81,10 +81,7 @@ class AudioEffectsEngine {
         setBass(0)
         setVirtualizer(0)
         setLoudness(0)
-        setEqualizerEnabled(true)
-        setBassEnabled(true)
-        setVirtualizerEnabled(true)
-        setLoudnessEnabled(true)
+        setEqualizerEnabled(false)
     }
 
     /**
@@ -97,10 +94,10 @@ class AudioEffectsEngine {
         releaseHardware()
         attachedSessionId = audioSessionId
 
-        equalizer = runCatching { Equalizer(0, audioSessionId).apply { enabled = true } }.getOrNull()
-        bassBoost = runCatching { BassBoost(0, audioSessionId).apply { enabled = true } }.getOrNull()
-        virtualizerFx = runCatching { Virtualizer(0, audioSessionId).apply { enabled = true } }.getOrNull()
-        loudness = runCatching { LoudnessEnhancer(audioSessionId).apply { enabled = true } }.getOrNull()
+        equalizer = runCatching { Equalizer(0, audioSessionId).apply { enabled = false } }.getOrNull()
+        bassBoost = runCatching { BassBoost(0, audioSessionId).apply { enabled = false } }.getOrNull()
+        virtualizerFx = runCatching { Virtualizer(0, audioSessionId).apply { enabled = false } }.getOrNull()
+        loudness = runCatching { LoudnessEnhancer(audioSessionId).apply { enabled = false } }.getOrNull()
 
         val eqBandCount = equalizer?.numberOfBands?.toInt() ?: 0
         val restoredBands = when {
@@ -178,8 +175,18 @@ class AudioEffectsEngine {
     }
 
     fun setEqualizerEnabled(enabled: Boolean) {
-        _state.value = _state.value.copy(equalizerEnabled = enabled)
+        _state.value = if (enabled) {
+            _state.value.copy(equalizerEnabled = true)
+        } else {
+            _state.value.copy(
+                equalizerEnabled = false,
+                bassEnabled = false,
+                virtualizerEnabled = false,
+                loudnessEnabled = false
+            )
+        }
         updateHardwareEnabled()
+        applyHardwareGain()
     }
 
     fun setBassEnabled(enabled: Boolean) {
@@ -219,7 +226,7 @@ class AudioEffectsEngine {
 
     private fun applyHardwareGain() {
         val state = _state.value
-        val userGain = if (state.loudnessEnabled) state.loudnessMb else 0
+        val userGain = if (state.equalizerEnabled && state.loudnessEnabled) state.loudnessMb else 0
         val totalGainMb = (userGain + state.normalizationGainMb).coerceIn(-1200, 2400)
         val positiveGain = totalGainMb.coerceAtLeast(0)
         val attenuationMb = totalGainMb.coerceAtMost(0)
@@ -237,10 +244,10 @@ class AudioEffectsEngine {
     private fun updateHardwareEnabled() {
         val state = _state.value
         runCatching { equalizer?.enabled = state.equalizerEnabled }
-        runCatching { bassBoost?.enabled = state.bassEnabled }
-        runCatching { virtualizerFx?.enabled = state.virtualizerEnabled }
+        runCatching { bassBoost?.enabled = state.equalizerEnabled && state.bassEnabled }
+        runCatching { virtualizerFx?.enabled = state.equalizerEnabled && state.virtualizerEnabled }
         // Automatic normalization shares this effect, so it remains active when it has work.
-        runCatching { loudness?.enabled = state.loudnessEnabled || state.normalizationGainMb != 0 }
+        runCatching { loudness?.enabled = (state.equalizerEnabled && state.loudnessEnabled) || state.normalizationGainMb != 0 }
     }
 
     private fun releaseHardware() {

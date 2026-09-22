@@ -165,6 +165,13 @@ class PlaybackConnection(private val context: Context) {
 
     fun addToQueue(song: SongEntity) = controller?.addMediaItem(song.toMediaItem())
 
+    fun playQueueItem(index: Int) = controller?.let { player ->
+        if (index in 0 until player.mediaItemCount) {
+            player.seekToDefaultPosition(index)
+            player.play()
+        }
+    }
+
     fun removeQueueItem(index: Int) = controller?.let { player ->
         if (index in 0 until player.mediaItemCount) player.removeMediaItem(index)
     }

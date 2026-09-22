@@ -94,8 +94,11 @@ class LocalRadioManager(
         }
         scope.launch {
             while (true) {
-                if (_state.value.mode == LocalRadioMode.HOSTING) refreshHostState()
-                delay(1_000L)
+                if (_state.value.mode == LocalRadioMode.HOSTING) {
+                    playback.refreshPosition()
+                    refreshHostState()
+                }
+                delay(500L)
             }
         }
     }

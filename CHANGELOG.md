@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0-alpha — 0.8Alpha
+
+- eliminated the first-frame theme/accent flash by loading persisted appearance before Compose starts
+- redesigned Now Playing quick actions and queue rows so Persian and compact screens no longer overflow
+- added the Local Radio shortcut beside Settings and refreshed host position continuously for reliable synchronization
+- made audio effects opt-in: equalizer is off by default and disabling it also disables every dependent effect and control
+- preserved every existing NEO+, Track+, Offline Pro, playback, lyrics, library, playlist, favorite, radio, and visual capability
+
 ## 0.7.0-alpha — 0.7Alpha
 
 - fixed live English/Persian switching and declared both application locales for Android

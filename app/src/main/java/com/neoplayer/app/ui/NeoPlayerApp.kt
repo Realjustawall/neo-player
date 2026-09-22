@@ -270,7 +270,12 @@ private fun PlayerShell(vm: MainViewModel) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (destination) {
-                Destination.HOME -> HomeScreen(vm, openSettings = { settingsOpen = true }, openLiked = { likedSongsOpen = true })
+                Destination.HOME -> HomeScreen(
+                    vm,
+                    openSettings = { settingsOpen = true },
+                    openLiked = { likedSongsOpen = true },
+                    openLocalRadio = { localRadioOpen = true }
+                )
                 Destination.SEARCH -> SearchScreen(vm)
                 Destination.LIBRARY -> LibraryScreen(vm, ux)
             }
@@ -373,7 +378,7 @@ private fun ScreenHeader(title: String, subtitle: String? = null, action: (@Comp
 }
 
 @Composable
-private fun HomeScreen(vm: MainViewModel, openSettings: () -> Unit, openLiked: () -> Unit) {
+private fun HomeScreen(vm: MainViewModel, openSettings: () -> Unit, openLiked: () -> Unit, openLocalRadio: () -> Unit) {
     val songs by vm.songs.collectAsState()
     val favorites by vm.favoriteIds.collectAsState()
     val histories by vm.histories.collectAsState()
@@ -390,7 +395,10 @@ private fun HomeScreen(vm: MainViewModel, openSettings: () -> Unit, openLiked: (
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             ScreenHeader(greeting, stringResource(R.string.your_music_stays_yours), action = {
-                IconButton(openSettings) { Icon(Icons.Rounded.Settings, stringResource(R.string.settings)) }
+                Row {
+                    IconButton(openLocalRadio) { Icon(Icons.Rounded.Radio, stringResource(R.string.local_radio)) }
+                    IconButton(openSettings) { Icon(Icons.Rounded.Settings, stringResource(R.string.settings)) }
+                }
             })
         }
         if (songs.isEmpty()) item { EmptyLibrary(vm) }
@@ -993,7 +1001,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit, openLocalRadi
                     }
                 }
                 when (panel) {
-                    "queue" -> QueuePanel(vm)
+                    "queue" -> QueuePanel(vm) { panel = "player" }
                     "lyrics" -> LyricsPanel(vm, item.mediaId.toLongOrNull() ?: -1, state.positionMs)
                     else -> PlayerPanel(vm, openQueue = { panel = "queue" }, openLyrics = { panel = "lyrics" }, openEffects = { effectsOpen = true }, openLocalRadio = openLocalRadio)
                 }
@@ -1052,12 +1060,12 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit, openLocalRadi
             IconButton(vm::next, Modifier.size(58.dp)) { Icon(Icons.Rounded.SkipNext, stringResource(R.string.next), Modifier.size(38.dp)) }
             IconButton(vm::cycleRepeat) { Icon(if (state.repeatMode == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat, stringResource(R.string.repeat), tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(openEffects) { Icon(Icons.Rounded.GraphicEq, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.audio_effects)) }
-            TextButton(openLyrics) { Icon(Icons.Rounded.Lyrics, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.lyrics)) }
-            TextButton(openQueue) { Icon(Icons.Rounded.QueueMusic, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.queue)) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PlayerQuickAction(Icons.Rounded.GraphicEq, stringResource(R.string.audio_effects), openEffects, Modifier.weight(1f))
+            PlayerQuickAction(Icons.Rounded.Lyrics, stringResource(R.string.lyrics), openLyrics, Modifier.weight(1f))
+            PlayerQuickAction(Icons.Rounded.QueueMusic, stringResource(R.string.queue), openQueue, Modifier.weight(1f))
+            PlayerQuickAction(Icons.Rounded.Radio, stringResource(R.string.local_radio), openLocalRadio, Modifier.weight(1f))
         }
-        TextButton(openLocalRadio) { Icon(Icons.Rounded.Radio, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.local_radio)) }
         Box {
             TextButton({ speedMenu = true }) { Icon(Icons.Rounded.Speed, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.playback_speed)) }
             DropdownMenu(speedMenu, { speedMenu = false }) { listOf(.5f, .75f, 1f, 1.25f, 1.5f, 2f).forEach { speed -> DropdownMenuItem({ Text("${speed}×") }, { vm.setSpeed(speed); speedMenu = false }) } }
@@ -1080,11 +1088,32 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit, openLocalRadi
     }
 }
 
-@Composable private fun QueuePanel(vm: MainViewModel) {
+@Composable
+private fun PlayerQuickAction(icon: ImageVector, label: String, action: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = action),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .72f)
+    ) {
+        Column(
+            Modifier.padding(horizontal = 4.dp, vertical = 9.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(icon, label, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(4.dp))
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 10.sp)
+        }
+    }
+}
+
+@Composable private fun QueuePanel(vm: MainViewModel, close: () -> Unit) {
     val state by vm.playback.collectAsState()
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.queue), Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) }
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.queue), style = MaterialTheme.typography.headlineMedium)
+                Text(stringResource(R.string.queue_track_count, state.queue.size), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
             TextButton(vm::clearQueue) { Text(stringResource(R.string.clear)) }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1101,10 +1130,16 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit, openLocalRadi
                 label = { Text(stringResource(R.string.repeat)) }
             )
         }
-        LazyColumn { itemsIndexed(state.queue, key = { _, item -> item.mediaId }) { index, item ->
+        if (state.queue.isEmpty()) {
+            Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.queue_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else LazyColumn { itemsIndexed(state.queue, key = { _, item -> item.mediaId }) { index, item ->
             var currentIndex by remember(item.mediaId) { mutableIntStateOf(index) }
             var dragDistance by remember(item.mediaId) { mutableFloatStateOf(0f) }
-            Row(Modifier.fillMaxWidth().padding(12.dp).pointerInput(item.mediaId) {
+            var itemMenu by remember(item.mediaId) { mutableStateOf(false) }
+            val isCurrent = item.mediaId == state.current?.mediaId
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp).clip(RoundedCornerShape(14.dp)).background(if (isCurrent) MaterialTheme.colorScheme.primaryContainer else Color.Transparent).clickable { vm.playQueueItem(index) }.padding(9.dp).pointerInput(item.mediaId) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = { currentIndex = index; dragDistance = 0f },
                     onDragCancel = { dragDistance = 0f },
@@ -1124,9 +1159,28 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit, openLocalRadi
                     Text(item.mediaMetadata.artist?.toString().orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }
                 Icon(Icons.Rounded.DragHandle, stringResource(R.string.reorder), Modifier.padding(horizontal = 4.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                IconButton({ vm.moveQueueItem(index, index - 1) }, enabled = index > 0) { Icon(Icons.Rounded.KeyboardArrowUp, stringResource(R.string.move_up)) }
-                IconButton({ vm.moveQueueItem(index, index + 1) }, enabled = index < state.queue.lastIndex) { Icon(Icons.Rounded.KeyboardArrowDown, stringResource(R.string.move_down)) }
-                IconButton({ vm.removeQueueItem(index) }) { Icon(Icons.Rounded.Close, stringResource(R.string.remove)) }
+                Box {
+                    IconButton({ itemMenu = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more)) }
+                    DropdownMenu(itemMenu, { itemMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.move_up)) },
+                            onClick = { vm.moveQueueItem(index, index - 1); itemMenu = false },
+                            enabled = index > 0,
+                            leadingIcon = { Icon(Icons.Rounded.KeyboardArrowUp, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.move_down)) },
+                            onClick = { vm.moveQueueItem(index, index + 1); itemMenu = false },
+                            enabled = index < state.queue.lastIndex,
+                            leadingIcon = { Icon(Icons.Rounded.KeyboardArrowDown, null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.remove)) },
+                            onClick = { vm.removeQueueItem(index); itemMenu = false },
+                            leadingIcon = { Icon(Icons.Rounded.Close, null) }
+                        )
+                    }
+                }
             }
         } }
     }
@@ -1209,18 +1263,19 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit, openLocalRadi
                         stringResource(R.string.electronic), stringResource(R.string.vocal), stringResource(R.string.custom)
                     ),
                     vm.audioPresets.indexOf(effects.preset).coerceAtLeast(0),
-                    { index -> vm.setAudioPreset(vm.audioPresets[index]) }
+                    { index -> vm.setAudioPreset(vm.audioPresets[index]) },
+                    enabled = effects.equalizerEnabled
                 )
             }
             if (effects.preset == "Custom") itemsIndexed(effects.bandLevels) { index, level ->
-                EffectSlider(stringResource(R.string.band_number, index + 1), level.toInt() + 1500, 3000) { vm.setEqualizerBand(index, (it - 1500).toShort()) }
+                EffectSlider(stringResource(R.string.band_number, index + 1), level.toInt() + 1500, 3000, { vm.setEqualizerBand(index, (it - 1500).toShort()) }, effects.equalizerEnabled)
             }
-            item { ToggleRow(stringResource(R.string.enable_bass), stringResource(R.string.bass_boost), effects.bassEnabled, vm::setBassEnabled) }
-            item { EffectSlider(stringResource(R.string.bass_boost), effects.bass, 1000, vm::setBass) }
-            item { ToggleRow(stringResource(R.string.enable_virtualizer), stringResource(R.string.virtualizer), effects.virtualizerEnabled, vm::setVirtualizerEnabled) }
-            item { EffectSlider(stringResource(R.string.virtualizer), effects.virtualizer, 1000, vm::setVirtualizer) }
-            item { ToggleRow(stringResource(R.string.enable_loudness), stringResource(R.string.loudness), effects.loudnessEnabled, vm::setLoudnessEnabled) }
-            item { EffectSlider(stringResource(R.string.loudness), effects.loudnessMb, 1200, vm::setLoudness) }
+            item { ToggleRow(stringResource(R.string.enable_bass), stringResource(R.string.bass_boost), effects.bassEnabled, vm::setBassEnabled, effects.equalizerEnabled) }
+            item { EffectSlider(stringResource(R.string.bass_boost), effects.bass, 1000, vm::setBass, effects.equalizerEnabled && effects.bassEnabled) }
+            item { ToggleRow(stringResource(R.string.enable_virtualizer), stringResource(R.string.virtualizer), effects.virtualizerEnabled, vm::setVirtualizerEnabled, effects.equalizerEnabled) }
+            item { EffectSlider(stringResource(R.string.virtualizer), effects.virtualizer, 1000, vm::setVirtualizer, effects.equalizerEnabled && effects.virtualizerEnabled) }
+            item { ToggleRow(stringResource(R.string.enable_loudness), stringResource(R.string.loudness), effects.loudnessEnabled, vm::setLoudnessEnabled, effects.equalizerEnabled) }
+            item { EffectSlider(stringResource(R.string.loudness), effects.loudnessMb, 1200, vm::setLoudness, effects.equalizerEnabled && effects.loudnessEnabled) }
             item { Spacer(Modifier.height(40.dp)) }
         }
     }
@@ -1273,11 +1328,15 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit, openLocalRadi
         item { SettingsTitle(stringResource(R.string.audio)) }
         item { HintCard(stringResource(R.string.track_effect_profile) + (playback.current?.mediaMetadata?.title?.toString()?.let { " • $it" } ?: "") + "\n" + stringResource(R.string.track_effect_profile_summary)) }
         if (audioEffects.available) {
-            item { ChoiceRow(stringResource(R.string.equalizer), listOf(stringResource(R.string.normal), stringResource(R.string.bass_boost), stringResource(R.string.rock), stringResource(R.string.pop), stringResource(R.string.classical), stringResource(R.string.jazz), stringResource(R.string.electronic), stringResource(R.string.vocal), stringResource(R.string.custom)), vm.audioPresets.indexOf(audioEffects.preset).coerceAtLeast(0)) { vm.setAudioPreset(vm.audioPresets[it]) } }
-            item { EffectSlider(stringResource(R.string.bass_boost), audioEffects.bass, 1000, vm::setBass) }
-            item { EffectSlider(stringResource(R.string.virtualizer), audioEffects.virtualizer, 1000, vm::setVirtualizer) }
-            item { EffectSlider(stringResource(R.string.loudness), audioEffects.loudnessMb, 1200, vm::setLoudness) }
-            if (audioEffects.preset == "Custom") itemsIndexed(audioEffects.bandLevels) { index, level -> EffectSlider(stringResource(R.string.band_number, index + 1), level.toInt() + 1500, 3000) { vm.setEqualizerBand(index, (it - 1500).toShort()) } }
+            item { ToggleRow(stringResource(R.string.enable_equalizer), stringResource(R.string.equalizer), audioEffects.equalizerEnabled, vm::setEqualizerEnabled) }
+            item { ChoiceRow(stringResource(R.string.equalizer), listOf(stringResource(R.string.normal), stringResource(R.string.bass_boost), stringResource(R.string.rock), stringResource(R.string.pop), stringResource(R.string.classical), stringResource(R.string.jazz), stringResource(R.string.electronic), stringResource(R.string.vocal), stringResource(R.string.custom)), vm.audioPresets.indexOf(audioEffects.preset).coerceAtLeast(0), { vm.setAudioPreset(vm.audioPresets[it]) }, audioEffects.equalizerEnabled) }
+            item { ToggleRow(stringResource(R.string.enable_bass), stringResource(R.string.bass_boost), audioEffects.bassEnabled, vm::setBassEnabled, audioEffects.equalizerEnabled) }
+            item { EffectSlider(stringResource(R.string.bass_boost), audioEffects.bass, 1000, vm::setBass, audioEffects.equalizerEnabled && audioEffects.bassEnabled) }
+            item { ToggleRow(stringResource(R.string.enable_virtualizer), stringResource(R.string.virtualizer), audioEffects.virtualizerEnabled, vm::setVirtualizerEnabled, audioEffects.equalizerEnabled) }
+            item { EffectSlider(stringResource(R.string.virtualizer), audioEffects.virtualizer, 1000, vm::setVirtualizer, audioEffects.equalizerEnabled && audioEffects.virtualizerEnabled) }
+            item { ToggleRow(stringResource(R.string.enable_loudness), stringResource(R.string.loudness), audioEffects.loudnessEnabled, vm::setLoudnessEnabled, audioEffects.equalizerEnabled) }
+            item { EffectSlider(stringResource(R.string.loudness), audioEffects.loudnessMb, 1200, vm::setLoudness, audioEffects.equalizerEnabled && audioEffects.loudnessEnabled) }
+            if (audioEffects.preset == "Custom") itemsIndexed(audioEffects.bandLevels) { index, level -> EffectSlider(stringResource(R.string.band_number, index + 1), level.toInt() + 1500, 3000, { vm.setEqualizerBand(index, (it - 1500).toShort()) }, audioEffects.equalizerEnabled) }
         } else if (equalizerIntent.resolveActivity(context.packageManager) != null) item { SettingsAction(Icons.Rounded.MusicNote, stringResource(R.string.equalizer), stringResource(R.string.equalizer_unavailable_summary), { context.startActivity(equalizerIntent) }) }
         item { SettingsAction(Icons.Rounded.MusicNote, stringResource(R.string.audio_analysis), stringResource(R.string.audio_analysis_summary), { ux.openOfflinePro(OfflineProSection.ANALYSIS) }) }
         item { SettingsTitle(stringResource(R.string.lyrics)) }
@@ -1300,9 +1359,9 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit, openLocalRadi
 
 @Composable private fun SettingsTitle(text: String) = Text(text, Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 6.dp), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
 @Composable private fun SettingsAction(icon: ImageVector, title: String, subtitle: String, action: () -> Unit) = Row(Modifier.fillMaxWidth().clickable(onClick = action).padding(20.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null); Column(Modifier.padding(start = 16.dp)) { Text(title); Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-@Composable private fun ToggleRow(title: String, subtitle: String, checked: Boolean, change: (Boolean) -> Unit) = Row(Modifier.fillMaxWidth().clickable { change(!checked) }.padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title); Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(checked, change) }
-@Composable private fun EffectSlider(title: String, value: Int, max: Int, change: (Int) -> Unit) = Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) { Row { Text(title); Spacer(Modifier.weight(1f)); Text("${value * 100 / max}%") }; Slider(value.toFloat(), { change(it.toInt()) }, valueRange = 0f..max.toFloat()) }
-@Composable private fun ChoiceRow(title: String, choices: List<String>, selected: Int, choose: (Int) -> Unit) { Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) { Text(title, fontWeight = FontWeight.SemiBold); LazyRow { items(choices.size) { index -> OutlinedButton({ choose(index) }, Modifier.padding(end = 8.dp)) { Text((if (index == selected) "✓ " else "") + choices[index]) } } } } }
+@Composable private fun ToggleRow(title: String, subtitle: String, checked: Boolean, change: (Boolean) -> Unit, enabled: Boolean = true) = Row(Modifier.fillMaxWidth().alpha(if (enabled) 1f else .45f).clickable(enabled = enabled) { change(!checked) }.padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title); Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(checked, change, enabled = enabled) }
+@Composable private fun EffectSlider(title: String, value: Int, max: Int, change: (Int) -> Unit, enabled: Boolean = true) = Column(Modifier.fillMaxWidth().alpha(if (enabled) 1f else .45f).padding(horizontal = 20.dp, vertical = 4.dp)) { Row { Text(title); Spacer(Modifier.weight(1f)); Text("${value * 100 / max}%") }; Slider(value.toFloat(), { change(it.toInt()) }, enabled = enabled, valueRange = 0f..max.toFloat()) }
+@Composable private fun ChoiceRow(title: String, choices: List<String>, selected: Int, choose: (Int) -> Unit, enabled: Boolean = true) { Column(Modifier.alpha(if (enabled) 1f else .45f).padding(horizontal = 20.dp, vertical = 8.dp)) { Text(title, fontWeight = FontWeight.SemiBold); LazyRow { items(choices.size) { index -> OutlinedButton({ choose(index) }, Modifier.padding(end = 8.dp), enabled = enabled) { Text((if (index == selected) "✓ " else "") + choices[index]) } } } } }
 
 @Composable private fun CustomColorDialog(dismiss: () -> Unit, save: (Int) -> Unit) {
     var hex by remember { mutableStateOf("FF7A1A") }; val valid = Regex("[0-9a-fA-F]{6}").matches(hex)

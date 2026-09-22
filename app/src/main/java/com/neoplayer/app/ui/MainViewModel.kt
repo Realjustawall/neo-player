@@ -9,7 +9,6 @@ import com.neoplayer.app.NeoApplication
 import com.neoplayer.app.data.LyricsEntity
 import com.neoplayer.app.data.SongEntity
 import com.neoplayer.app.settings.Accent
-import com.neoplayer.app.settings.AppSettings
 import com.neoplayer.app.settings.ThemeMode
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -46,7 +45,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val categories = repository.categories.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val histories = repository.histories.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val excludedFolders = repository.excludedFolders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val settings = app.settings.values.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
+    val settings = app.settings.values.stateIn(viewModelScope, SharingStarted.Eagerly, app.initialSettings)
     val playback = app.playback.state
     val audioEffects = app.audioEffects.state
     val localRadio = app.localRadio.state
@@ -207,6 +206,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleFavoriteCollection(type: String, key: String) = viewModelScope.launch { repository.toggleFavoriteCollection(type, key) }
     fun addNext(song: SongEntity) = app.playback.addNext(song)
     fun addQueue(song: SongEntity) = app.playback.addToQueue(song)
+    fun playQueueItem(index: Int) = app.playback.playQueueItem(index)
     fun clearQueue() = app.playback.clearQueue()
     fun removeQueueItem(index: Int) = app.playback.removeQueueItem(index)
     fun moveQueueItem(from: Int, to: Int) = app.playback.moveQueueItem(from, to)

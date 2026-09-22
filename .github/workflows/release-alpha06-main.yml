@@ -1,22 +1,22 @@
-name: Release 0.7Alpha from Main
+name: Release 0.8Alpha from Main
 
 on:
   push:
     branches: [main]
     paths:
-      - 'ALPHA07_MAIN_RELEASE_TRIGGER'
+      - 'ALPHA08_MAIN_RELEASE_TRIGGER'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-alpha07-main
+  group: release-alpha08-main
   cancel-in-progress: false
 
 jobs:
   build-sign:
-    name: Build, test, lint, sign 0.7Alpha
+    name: Build, test, lint, sign 0.8Alpha
     runs-on: ubuntu-latest
     timeout-minutes: 70
     env:
@@ -29,7 +29,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify 0.7Alpha release source and rollback branch
+      - name: Verify 0.8Alpha release source and rollback branch
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -40,8 +40,8 @@ jobs:
           test -f app/src/main/java/com/neoplayer/app/lyrics/OfflineBuiltInModelStore.kt
           grep -q 'compileSdk = 36' app/build.gradle.kts
           grep -q 'targetSdk = 36' app/build.gradle.kts
-          grep -q 'versionCode = 7' app/build.gradle.kts
-          grep -q 'versionName = "0.7.0-alpha"' app/build.gradle.kts
+          grep -q 'versionCode = 8' app/build.gradle.kts
+          grep -q 'versionName = "0.8.0-alpha"' app/build.gradle.kts
           git ls-remote --exit-code --heads origin backup-main-before-alpha0.6-2026-09-18
 
       - name: Set up JDK 17
@@ -127,7 +127,7 @@ jobs:
       - name: Build Release APK and AAB
         run: gradle --no-daemon clean assembleRelease bundleRelease
 
-      - name: Sign 0.7Alpha package and verify signatures
+      - name: Sign 0.8Alpha package and verify signatures
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -135,8 +135,8 @@ jobs:
           RAW_AAB="$(find app/build/outputs/bundle/release -type f -name '*.aab' | head -1)"
           test -s "$RAW_APK"
           test -s "$RAW_AAB"
-          OUT_APK="$GITHUB_WORKSPACE/NEO-PLAYER-0.7Alpha-release.apk"
-          OUT_AAB="$GITHUB_WORKSPACE/NEO-PLAYER-0.7Alpha-release.aab"
+          OUT_APK="$GITHUB_WORKSPACE/NEO-PLAYER-0.8Alpha-release.apk"
+          OUT_AAB="$GITHUB_WORKSPACE/NEO-PLAYER-0.8Alpha-release.aab"
           if [ "${NEO_RELEASE_SIGNED:-false}" = "true" ]; then
             cp "$RAW_APK" "$OUT_APK"
             cp "$RAW_AAB" "$OUT_AAB"
@@ -158,24 +158,24 @@ jobs:
           jarsigner -verify "$OUT_AAB" >/dev/null
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$OUT_APK" | tee apk-badging.txt
           grep -q "package: name='com.neoplayer.app'" apk-badging.txt
-          grep -q "versionCode='7'" apk-badging.txt
-          grep -q "versionName='0.7.0-alpha'" apk-badging.txt
+          grep -q "versionCode='8'" apk-badging.txt
+          grep -q "versionName='0.8.0-alpha'" apk-badging.txt
           APK_BYTES="$(stat -c %s "$OUT_APK")"
           AAB_BYTES="$(stat -c %s "$OUT_AAB")"
-          # 0.7Alpha is intentionally additive and must remain larger than the complete 0.6Alpha APK.
-          test "$APK_BYTES" -gt 45903128
+          # 0.8Alpha is intentionally additive and must remain larger than the complete 0.7Alpha APK.
+          test "$APK_BYTES" -gt 46157482
           test "$APK_BYTES" -le 65000000
           APK_MIB="$(awk -v b="$APK_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
           AAB_MIB="$(awk -v b="$AAB_BYTES" 'BEGIN { printf "%.3f", b/1048576 }')"
           CERT_SHA256="$(grep -m1 'Signer #1 certificate SHA-256 digest:' apk-signature.txt | sed 's/.*: //')"
           APK_SHA256="$(sha256sum "$OUT_APK" | awk '{print $1}')"
           AAB_SHA256="$(sha256sum "$OUT_AAB" | awk '{print $1}')"
-          cat > RELEASE_ALPHA07_BUILD.txt <<EOF
-          TAG=v0.7.0-alpha
+          cat > RELEASE_ALPHA08_BUILD.txt <<EOF
+          TAG=v0.8.0-alpha
           BUILD_SHA=$GITHUB_SHA
           PACKAGE=com.neoplayer.app
-          VERSION_CODE=7
-          VERSION_NAME=0.7.0-alpha
+          VERSION_CODE=8
+          VERSION_NAME=0.8.0-alpha
           APK_BYTES=$APK_BYTES
           APK_MIB=$APK_MIB
           APK_SHA256=$APK_SHA256
@@ -188,23 +188,23 @@ jobs:
           CERT_SHA256=$CERT_SHA256
           BACKUP_BRANCH=backup-main-before-alpha0.6-2026-09-18
           EOF
-          cat RELEASE_ALPHA07_BUILD.txt
+          cat RELEASE_ALPHA08_BUILD.txt
 
-      - name: Upload signed 0.7Alpha candidate
+      - name: Upload signed 0.8Alpha candidate
         uses: actions/upload-artifact@v4
         with:
-          name: alpha07-signed-candidate
+          name: alpha08-signed-candidate
           path: |
-            NEO-PLAYER-0.7Alpha-release.apk
-            NEO-PLAYER-0.7Alpha-release.aab
-            RELEASE_ALPHA07_BUILD.txt
+            NEO-PLAYER-0.8Alpha-release.apk
+            NEO-PLAYER-0.8Alpha-release.aab
+            RELEASE_ALPHA08_BUILD.txt
             apk-signature.txt
             apk-badging.txt
           if-no-files-found: error
           retention-days: 30
 
   install-verify:
-    name: Install and launch 0.7Alpha on Ubuntu KVM emulator
+    name: Install and launch 0.8Alpha on Ubuntu KVM emulator
     needs: build-sign
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -215,7 +215,7 @@ jobs:
       - name: Download signed candidate
         uses: actions/download-artifact@v4
         with:
-          name: alpha07-signed-candidate
+          name: alpha08-signed-candidate
           path: candidate
 
       - name: Set up JDK 17
@@ -255,9 +255,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: alpha07-install-evidence
+          name: alpha08-install-evidence
           path: |
-            INSTALL_ALPHA07_KVM_VERIFICATION.txt
+            INSTALL_ALPHA08_KVM_VERIFICATION.txt
             runtime-result.txt
             crash-summary.txt
             logcat.txt
@@ -272,7 +272,7 @@ jobs:
           retention-days: 90
 
   publish:
-    name: Publish verified NEO PLAYER 0.7Alpha
+    name: Publish verified NEO PLAYER 0.8Alpha
     needs: [build-sign, install-verify]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -280,50 +280,50 @@ jobs:
       - name: Download signed candidate
         uses: actions/download-artifact@v4
         with:
-          name: alpha07-signed-candidate
+          name: alpha08-signed-candidate
           path: candidate
 
       - name: Download install evidence
         uses: actions/download-artifact@v4
         with:
-          name: alpha07-install-evidence
+          name: alpha08-install-evidence
           path: evidence
 
       - name: Final verification gate
         shell: bash
         run: |
           set -Eeuo pipefail
-          grep -q '^APK_SIGNATURE_VERIFIED=true$' candidate/RELEASE_ALPHA07_BUILD.txt
-          grep -q '^ZIPALIGN_16K_VERIFIED=true$' candidate/RELEASE_ALPHA07_BUILD.txt
-          grep -q '^INSTALL_TEST=PASS$' evidence/INSTALL_ALPHA07_KVM_VERIFICATION.txt
-          cat evidence/INSTALL_ALPHA07_KVM_VERIFICATION.txt >> candidate/RELEASE_ALPHA07_BUILD.txt
-          cat candidate/RELEASE_ALPHA07_BUILD.txt
+          grep -q '^APK_SIGNATURE_VERIFIED=true$' candidate/RELEASE_ALPHA08_BUILD.txt
+          grep -q '^ZIPALIGN_16K_VERIFIED=true$' candidate/RELEASE_ALPHA08_BUILD.txt
+          grep -q '^INSTALL_TEST=PASS$' evidence/INSTALL_ALPHA08_KVM_VERIFICATION.txt
+          cat evidence/INSTALL_ALPHA08_KVM_VERIFICATION.txt >> candidate/RELEASE_ALPHA08_BUILD.txt
+          cat candidate/RELEASE_ALPHA08_BUILD.txt
 
-      - name: Create or update GitHub Release 0.7Alpha
+      - name: Create or update GitHub Release 0.8Alpha
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -Eeuo pipefail
-          TAG=v0.7.0-alpha
-          NOTES='0.7Alpha fixes English/Persian switching and nested Back behavior, adds complete Liked Songs, per-track effect switches, and secure QR-based synchronized Local Radio with Bluetooth discovery and listener controls. Every existing NEO+/Track+/Offline Pro capability remains available. This candidate passed unit tests, lint, release assembly, signature verification, 16 KiB zip alignment, Android 14/API 34 KVM installation, launch, and runtime health checks.'
+          TAG=v0.8.0-alpha
+          NOTES='0.8Alpha removes the first-frame theme flash, repairs compact Persian queue and Now Playing layouts, puts Local Radio beside Settings, refreshes host timing for reliable synchronized playback, and makes the equalizer fully opt-in with every dependent control disabled while it is off. Every existing NEO+/Track+/Offline Pro, favorite, playlist, lyric, playback, and visual capability remains available. This candidate passed unit tests, lint, release assembly, signature verification, 16 KiB zip alignment, Android 14/API 34 KVM installation, launch, and runtime health checks.'
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
-              --title "NEO PLAYER 0.7Alpha" \
+              --title "NEO PLAYER 0.8Alpha" \
               --notes "$NOTES"
           fi
           gh release upload "$TAG" \
-            candidate/NEO-PLAYER-0.7Alpha-release.apk \
-            candidate/NEO-PLAYER-0.7Alpha-release.aab \
-            candidate/RELEASE_ALPHA07_BUILD.txt \
-            evidence/INSTALL_ALPHA07_KVM_VERIFICATION.txt \
+            candidate/NEO-PLAYER-0.8Alpha-release.apk \
+            candidate/NEO-PLAYER-0.8Alpha-release.aab \
+            candidate/RELEASE_ALPHA08_BUILD.txt \
+            evidence/INSTALL_ALPHA08_KVM_VERIFICATION.txt \
             --repo "$GITHUB_REPOSITORY" \
             --clobber
           gh release edit "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "NEO PLAYER 0.7Alpha" \
+            --title "NEO PLAYER 0.8Alpha" \
             --latest \
             --prerelease=false \
             --notes "$NOTES"

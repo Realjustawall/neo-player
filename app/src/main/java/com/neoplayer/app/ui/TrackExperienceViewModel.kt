@@ -63,7 +63,7 @@ class TrackExperienceViewModel(application: Application) : AndroidViewModel(appl
     private val themeExtractor = ArtworkThemeExtractor(application)
 
     val playback = app.playback.state
-    val settings = app.settings.values.stateIn(viewModelScope, SharingStarted.Eagerly, com.neoplayer.app.settings.AppSettings())
+    val settings = app.settings.values.stateIn(viewModelScope, SharingStarted.Eagerly, app.initialSettings)
     val songs = repository.rawLibrary.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val speechModels = dao.speechModels().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 

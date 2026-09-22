@@ -14,6 +14,7 @@ import com.neoplayer.app.lyrics.SidecarLyricsLoader
 import com.neoplayer.app.playback.AudioEffectsEngine
 import com.neoplayer.app.playback.PlaybackConnection
 import com.neoplayer.app.radio.LocalRadioManager
+import com.neoplayer.app.settings.AppSettings
 import com.neoplayer.app.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,8 +23,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class NeoApplication : Application() {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -35,6 +38,8 @@ class NeoApplication : Application() {
     lateinit var repository: MusicRepository
         private set
     lateinit var settings: SettingsRepository
+        private set
+    lateinit var initialSettings: AppSettings
         private set
     lateinit var playback: PlaybackConnection
         private set
@@ -65,6 +70,10 @@ class NeoApplication : Application() {
             SidecarLyricsLoader(this)
         )
         settings = SettingsRepository(this)
+        // Resolve the persisted palette before Compose draws its first frame. DataStore is tiny,
+        // and doing this during the system splash prevents a dark/orange placeholder from flashing
+        // before a saved light theme or custom accent becomes available.
+        initialSettings = runBlocking(Dispatchers.IO) { settings.values.first() }
         playback = PlaybackConnection(this)
         playback.connect()
         localRadio = LocalRadioManager(this, repository, playback)
