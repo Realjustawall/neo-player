@@ -2,24 +2,24 @@
 
 ![NEO PLAYER mark](app/src/main/res/drawable/ic_neo_mark.xml)
 
-**0.7Alpha** (`0.7.0-alpha`, versionCode 7) — a modern local-first Android music player focused on offline playback, local intelligence, advanced transitions, per-track personalization, privacy, and a contextual Spotify-style UX.
+**0.8Alpha** (`0.8.0-alpha`, versionCode 8) — a modern local-first Android music player focused on offline playback, local intelligence, advanced transitions, per-track personalization, privacy, and a contextual Spotify-style UX.
 
 NEO PLAYER keeps the complete original player capability set while reorganizing features into the context where they are expected: Home, Search, Your Library, Create, Now Playing, and Settings. Existing library, queue, playlists, favorites, categories, lyrics, themes, audio effects, search, widget, playback controls, collection tools, NEO+, Track+, and Offline Pro capabilities remain available.
 
-> Current release: **v0.7.0-alpha — NEO PLAYER 0.7Alpha**
+> Current release: **v0.8.0-alpha — NEO PLAYER 0.8Alpha**
 >
-> [Download NEO-PLAYER-0.7Alpha-release.apk](https://github.com/Realjustawall/neo-player/releases/download/v0.7.0-alpha/NEO-PLAYER-0.7Alpha-release.apk)
-> [Open the v0.7.0-alpha release](https://github.com/Realjustawall/neo-player/releases/tag/v0.7.0-alpha)
+> [Download NEO-PLAYER-0.8Alpha-release.apk](https://github.com/Realjustawall/neo-player/releases/download/v0.8.0-alpha/NEO-PLAYER-0.8Alpha-release.apk)
+> [Open the v0.8.0-alpha release](https://github.com/Realjustawall/neo-player/releases/tag/v0.8.0-alpha)
 >
-> The release workflow rejects any APK that is not larger than the complete 0.6Alpha package.
+> The release workflow rejects any APK that is not larger than the complete 0.7Alpha package.
 
-## 0.7Alpha highlights
+## 0.8Alpha highlights
 
-- reliable live English/Persian switching with complete localized contextual navigation
-- one-level Back behavior throughout nested player and advanced-tool panels
-- complete Liked Songs view
-- per-track audio-effect panel with independent equalizer, bass, virtualizer and loudness switches
-- Local Radio with Bluetooth proximity advertising, secure QR joining, synchronized local-network playback, connected-listener visibility, individual removal and disconnect-all
+- persisted theme and accent are applied before the first Compose frame, without the old launch-color flash
+- compact Now Playing actions and queue item menus fit Persian, English, and narrow screens
+- Local Radio has a Home shortcut beside Settings and continuously refreshed host timing for synchronized playback
+- audio effects are opt-in and every dependent switch, preset, band, and slider is disabled while the equalizer is off
+- reliable live English/Persian switching, one-level Back behavior, complete Liked Songs, QR joining, and listener management remain available
 - all existing NEO+, Track+, Offline Pro, playback, library, lyrics, playlist and visual capabilities retained
 
 ## 0.6Alpha foundation
@@ -208,14 +208,14 @@ The Full-Offline build is intentionally much larger. The normal Play-oriented Re
 
 Current release:
 
-**NEO PLAYER 0.7Alpha — `v0.7.0-alpha`**
+**NEO PLAYER 0.8Alpha — `v0.8.0-alpha`**
 
 Published release assets:
 
-- `NEO-PLAYER-0.7Alpha-release.apk`
-- `NEO-PLAYER-0.7Alpha-release.aab`
-- `RELEASE_ALPHA07_BUILD.txt` — build/signature metadata
-- `INSTALL_ALPHA07_KVM_VERIFICATION.txt` — install/launch verification evidence
+- `NEO-PLAYER-0.8Alpha-release.apk`
+- `NEO-PLAYER-0.8Alpha-release.aab`
+- `RELEASE_ALPHA08_BUILD.txt` — build/signature metadata
+- `INSTALL_ALPHA08_KVM_VERIFICATION.txt` — install/launch verification evidence
 
 The release candidate passed JVM unit tests, Android Lint, Release APK/AAB assembly, APK signature verification, 16 KiB zip-alignment verification, Android 14 / API 34 x86_64 KVM installation, app launch, and runtime process-health checks before publishing.
 
@@ -227,7 +227,7 @@ Optional production signing is supported through release signing environment/sec
 
 The current Room database version is **v7**. Migrations are additive and preserve existing user data. Version 7 adds independent per-track effect switches while retaining all Track+, offline lyrics, recommendation, analysis, ReplayGain and Offline Backup data.
 
-No destructive migration is used for the 0.7Alpha upgrade path.
+No destructive migration is used for the 0.8Alpha upgrade path.
 
 ## Permissions and privacy
 

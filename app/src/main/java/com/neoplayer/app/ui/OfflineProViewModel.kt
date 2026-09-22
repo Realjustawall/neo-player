@@ -63,7 +63,7 @@ class OfflineProViewModel(application: Application) : AndroidViewModel(applicati
     private val spectrumAnalyzer = LocalSpectrumAnalyzer(application)
     private val playlistTransfer = PlaylistTransferManager(application, musicDao)
 
-    val settings = app.settings.values.stateIn(viewModelScope, SharingStarted.Eagerly, com.neoplayer.app.settings.AppSettings())
+    val settings = app.settings.values.stateIn(viewModelScope, SharingStarted.Eagerly, app.initialSettings)
     val playback = app.playback.state
     val songs = repository.rawLibrary.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val backupEntries = proDao.offlineBackup().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())

@@ -57,7 +57,7 @@ class NeoPlusViewModel(application: Application) : AndroidViewModel(application)
     val includedFolders = repository.includedFolders.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val excludedFolders = repository.excludedFolders.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val folders = MutableStateFlow<List<FolderSummary>>(emptyList())
-    val settings: StateFlow<AppSettings> = app.settings.values.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
+    val settings: StateFlow<AppSettings> = app.settings.values.stateIn(viewModelScope, SharingStarted.Eagerly, app.initialSettings)
     val playback = app.playback.state
     val audioEffects = app.audioEffects.state
 

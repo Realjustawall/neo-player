@@ -188,6 +188,8 @@
     <string name="current_line">Current line</string>
     <string name="time_mix">Time-of-day mix</string>
     <string name="local_radio">Local Radio</string>
+    <string name="queue_track_count">%1$d tracks</string>
+    <string name="queue_empty">Your play queue is empty</string>
     <string name="local_radio_subtitle">Listen together on nearby devices</string>
     <string name="host_local_radio">Host a radio</string>
     <string name="local_radio_privacy">Bluetooth announces the nearby session; audio stays on your local Wi-Fi or hotspot and is protected by the QR session key.</string>
