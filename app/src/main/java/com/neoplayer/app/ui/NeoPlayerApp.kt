@@ -1263,9 +1263,8 @@ private fun PlayerQuickAction(icon: ImageVector, label: String, action: () -> Un
                         stringResource(R.string.electronic), stringResource(R.string.vocal), stringResource(R.string.custom)
                     ),
                     vm.audioPresets.indexOf(effects.preset).coerceAtLeast(0),
-                    { index -> vm.setAudioPreset(vm.audioPresets[index]) },
                     enabled = effects.equalizerEnabled
-                )
+                ) { index -> vm.setAudioPreset(vm.audioPresets[index]) }
             }
             if (effects.preset == "Custom") itemsIndexed(effects.bandLevels) { index, level ->
                 EffectSlider(stringResource(R.string.band_number, index + 1), level.toInt() + 1500, 3000, { vm.setEqualizerBand(index, (it - 1500).toShort()) }, effects.equalizerEnabled)
@@ -1329,7 +1328,7 @@ private fun PlayerQuickAction(icon: ImageVector, label: String, action: () -> Un
         item { HintCard(stringResource(R.string.track_effect_profile) + (playback.current?.mediaMetadata?.title?.toString()?.let { " • $it" } ?: "") + "\n" + stringResource(R.string.track_effect_profile_summary)) }
         if (audioEffects.available) {
             item { ToggleRow(stringResource(R.string.enable_equalizer), stringResource(R.string.equalizer), audioEffects.equalizerEnabled, vm::setEqualizerEnabled) }
-            item { ChoiceRow(stringResource(R.string.equalizer), listOf(stringResource(R.string.normal), stringResource(R.string.bass_boost), stringResource(R.string.rock), stringResource(R.string.pop), stringResource(R.string.classical), stringResource(R.string.jazz), stringResource(R.string.electronic), stringResource(R.string.vocal), stringResource(R.string.custom)), vm.audioPresets.indexOf(audioEffects.preset).coerceAtLeast(0), { vm.setAudioPreset(vm.audioPresets[it]) }, audioEffects.equalizerEnabled) }
+            item { ChoiceRow(stringResource(R.string.equalizer), listOf(stringResource(R.string.normal), stringResource(R.string.bass_boost), stringResource(R.string.rock), stringResource(R.string.pop), stringResource(R.string.classical), stringResource(R.string.jazz), stringResource(R.string.electronic), stringResource(R.string.vocal), stringResource(R.string.custom)), vm.audioPresets.indexOf(audioEffects.preset).coerceAtLeast(0), audioEffects.equalizerEnabled) { vm.setAudioPreset(vm.audioPresets[it]) } }
             item { ToggleRow(stringResource(R.string.enable_bass), stringResource(R.string.bass_boost), audioEffects.bassEnabled, vm::setBassEnabled, audioEffects.equalizerEnabled) }
             item { EffectSlider(stringResource(R.string.bass_boost), audioEffects.bass, 1000, vm::setBass, audioEffects.equalizerEnabled && audioEffects.bassEnabled) }
             item { ToggleRow(stringResource(R.string.enable_virtualizer), stringResource(R.string.virtualizer), audioEffects.virtualizerEnabled, vm::setVirtualizerEnabled, audioEffects.equalizerEnabled) }
@@ -1361,7 +1360,7 @@ private fun PlayerQuickAction(icon: ImageVector, label: String, action: () -> Un
 @Composable private fun SettingsAction(icon: ImageVector, title: String, subtitle: String, action: () -> Unit) = Row(Modifier.fillMaxWidth().clickable(onClick = action).padding(20.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null); Column(Modifier.padding(start = 16.dp)) { Text(title); Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
 @Composable private fun ToggleRow(title: String, subtitle: String, checked: Boolean, change: (Boolean) -> Unit, enabled: Boolean = true) = Row(Modifier.fillMaxWidth().alpha(if (enabled) 1f else .45f).clickable(enabled = enabled) { change(!checked) }.padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title); Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Switch(checked, change, enabled = enabled) }
 @Composable private fun EffectSlider(title: String, value: Int, max: Int, change: (Int) -> Unit, enabled: Boolean = true) = Column(Modifier.fillMaxWidth().alpha(if (enabled) 1f else .45f).padding(horizontal = 20.dp, vertical = 4.dp)) { Row { Text(title); Spacer(Modifier.weight(1f)); Text("${value * 100 / max}%") }; Slider(value.toFloat(), { change(it.toInt()) }, enabled = enabled, valueRange = 0f..max.toFloat()) }
-@Composable private fun ChoiceRow(title: String, choices: List<String>, selected: Int, choose: (Int) -> Unit, enabled: Boolean = true) { Column(Modifier.alpha(if (enabled) 1f else .45f).padding(horizontal = 20.dp, vertical = 8.dp)) { Text(title, fontWeight = FontWeight.SemiBold); LazyRow { items(choices.size) { index -> OutlinedButton({ choose(index) }, Modifier.padding(end = 8.dp), enabled = enabled) { Text((if (index == selected) "✓ " else "") + choices[index]) } } } } }
+@Composable private fun ChoiceRow(title: String, choices: List<String>, selected: Int, enabled: Boolean = true, choose: (Int) -> Unit) { Column(Modifier.alpha(if (enabled) 1f else .45f).padding(horizontal = 20.dp, vertical = 8.dp)) { Text(title, fontWeight = FontWeight.SemiBold); LazyRow { items(choices.size) { index -> OutlinedButton({ choose(index) }, Modifier.padding(end = 8.dp), enabled = enabled) { Text((if (index == selected) "✓ " else "") + choices[index]) } } } } }
 
 @Composable private fun CustomColorDialog(dismiss: () -> Unit, save: (Int) -> Unit) {
     var hex by remember { mutableStateOf("FF7A1A") }; val valid = Regex("[0-9a-fA-F]{6}").matches(hex)
