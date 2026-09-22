@@ -13,6 +13,7 @@ import com.neoplayer.app.lyrics.LyricsProviderRegistry
 import com.neoplayer.app.lyrics.SidecarLyricsLoader
 import com.neoplayer.app.playback.AudioEffectsEngine
 import com.neoplayer.app.playback.PlaybackConnection
+import com.neoplayer.app.radio.LocalRadioManager
 import com.neoplayer.app.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +37,8 @@ class NeoApplication : Application() {
     lateinit var settings: SettingsRepository
         private set
     lateinit var playback: PlaybackConnection
+        private set
+    lateinit var localRadio: LocalRadioManager
         private set
     lateinit var lyricsProviders: LyricsProviderRegistry
         private set
@@ -64,6 +67,7 @@ class NeoApplication : Application() {
         settings = SettingsRepository(this)
         playback = PlaybackConnection(this)
         playback.connect()
+        localRadio = LocalRadioManager(this, repository, playback)
 
         appScope.launch {
             settings.values
@@ -94,6 +98,7 @@ class NeoApplication : Application() {
         runCatching { contentResolver.unregisterContentObserver(mediaObserver) }
         rescanJob?.cancel()
         playback.release()
+        localRadio.release()
         audioEffects.release()
         database.close()
         appScope.cancel()

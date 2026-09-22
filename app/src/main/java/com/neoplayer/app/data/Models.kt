@@ -170,7 +170,11 @@ data class TrackAudioEffectsEntity(
     val bass: Int = 0,
     val virtualizer: Int = 0,
     val loudnessMb: Int = 0,
-    val bandLevels: String = ""
+    val bandLevels: String = "",
+    val equalizerEnabled: Boolean = true,
+    val bassEnabled: Boolean = true,
+    val virtualizerEnabled: Boolean = true,
+    val loudnessEnabled: Boolean = true
 )
 
 data class AlbumSummary(val album: String, val artist: String, val albumId: Long, val songCount: Int, val durationMs: Long)

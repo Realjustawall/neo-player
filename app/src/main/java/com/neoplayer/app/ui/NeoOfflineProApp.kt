@@ -2,6 +2,7 @@
 
 package com.neoplayer.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -112,6 +113,7 @@ fun NeoOfflineProApp(
 
 @Composable
 private fun OfflineProPanel(vm: OfflineProViewModel, plusVm: NeoPlusViewModel, section: OfflineProSection, close: () -> Unit) {
+    BackHandler(onBack = close)
     val settings by vm.settings.collectAsState()
     val fa = settings.language == "fa" || (settings.language == "system" && Locale.getDefault().language == "fa")
     val title = when (section) {

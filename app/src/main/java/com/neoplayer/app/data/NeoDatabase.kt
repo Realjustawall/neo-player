@@ -36,7 +36,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReplayGainEntity::class,
         OfflineBackupEntryEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class NeoDatabase : RoomDatabase() {
@@ -47,7 +47,7 @@ abstract class NeoDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): NeoDatabase = Room.databaseBuilder(
             context.applicationContext, NeoDatabase::class.java, "neo-player.db"
-        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -151,6 +151,16 @@ abstract class NeoDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_offline_backup_entries_position` ON `offline_backup_entries` (`position`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_offline_backup_entries_mood` ON `offline_backup_entries` (`mood`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_offline_backup_entries_generatedAt` ON `offline_backup_entries` (`generatedAt`)")
+            }
+        }
+
+        /** Additive effect switches; existing per-track profiles stay enabled exactly as before. */
+        internal val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `track_audio_effects` ADD COLUMN `equalizerEnabled` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `track_audio_effects` ADD COLUMN `bassEnabled` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `track_audio_effects` ADD COLUMN `virtualizerEnabled` INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE `track_audio_effects` ADD COLUMN `loudnessEnabled` INTEGER NOT NULL DEFAULT 1")
             }
         }
     }

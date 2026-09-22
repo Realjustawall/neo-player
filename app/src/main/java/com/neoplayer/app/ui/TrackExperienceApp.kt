@@ -2,6 +2,7 @@
 
 package com.neoplayer.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.media3.common.util.UnstableApi
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -137,6 +138,7 @@ fun NeoUltimateApp(
 
 @Composable
 private fun TrackExperiencePanel(vm: TrackExperienceViewModel, section: TrackToolsSection, close: () -> Unit) {
+    BackHandler(onBack = close)
     val song by vm.currentSong.collectAsState()
     val profile by vm.currentProfile.collectAsState()
     val settings by vm.settings.collectAsState()

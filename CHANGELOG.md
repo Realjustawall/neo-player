@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0-alpha — 0.7Alpha
+
+- fixed live English/Persian switching and declared both application locales for Android
+- localized the remaining contextual Settings, Search, Library, and Now Playing actions
+- added per-track audio-effect controls with independent equalizer, bass, virtualizer, and loudness switches
+- added Local Radio hosting and joining with Bluetooth discovery, secure QR codes, synchronized LAN/hotspot streaming, listener management, and quick disconnect
+- fixed Back and close behavior so nested panels return exactly one level
+- added a complete Liked Songs view without changing the existing favorites model
+- preserved every existing NEO+, Track+, Offline Pro, playback, lyrics, library, playlist, and visual capability
+
 ## 0.6.0-alpha — 0.6Alpha
 
 - reorganized the app into Spotify-style contextual UX: Home, Search, Your Library, Create, and Now Playing

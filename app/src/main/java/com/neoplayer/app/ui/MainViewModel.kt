@@ -49,6 +49,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val settings = app.settings.values.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
     val playback = app.playback.state
     val audioEffects = app.audioEffects.state
+    val localRadio = app.localRadio.state
     val audioPresets get() = app.audioEffects.presets
 
     val query = MutableStateFlow("")
@@ -301,6 +302,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setVirtualizer(value: Int) { app.audioEffects.setVirtualizer(value); persistTrackEffects() }
     fun setLoudness(value: Int) { app.audioEffects.setLoudness(value); persistTrackEffects() }
     fun setEqualizerBand(index: Int, value: Short) { app.audioEffects.setBand(index, value); persistTrackEffects() }
+    fun setEqualizerEnabled(value: Boolean) { app.audioEffects.setEqualizerEnabled(value); persistTrackEffects() }
+    fun setBassEnabled(value: Boolean) { app.audioEffects.setBassEnabled(value); persistTrackEffects() }
+    fun setVirtualizerEnabled(value: Boolean) { app.audioEffects.setVirtualizerEnabled(value); persistTrackEffects() }
+    fun setLoudnessEnabled(value: Boolean) { app.audioEffects.setLoudnessEnabled(value); persistTrackEffects() }
+    fun hostLocalRadio() = app.localRadio.startHosting()
+    fun joinLocalRadio(code: String, name: String) = app.localRadio.join(code, name)
+    fun stopLocalRadio() = app.localRadio.stop()
+    fun disconnectRadioListener(id: String) = app.localRadio.disconnectListener(id)
+    fun disconnectAllRadioListeners() = app.localRadio.disconnectAllListeners()
     fun clearHistory() = viewModelScope.launch { repository.clearHistory() }
 
     private companion object {

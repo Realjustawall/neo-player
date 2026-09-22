@@ -4,7 +4,7 @@
         <item name="windowSplashScreenAnimatedIcon">@drawable/neo_logo</item>
         <item name="postSplashScreenTheme">@style/Theme.NeoPlayer</item>
     </style>
-    <style name="Theme.NeoPlayer" parent="android:style/Theme.Material.NoActionBar">
+    <style name="Theme.NeoPlayer" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>
