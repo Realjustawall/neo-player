@@ -2,19 +2,27 @@
 
 ![NEO PLAYER mark](app/src/main/res/drawable/ic_neo_mark.xml)
 
-**0.6Alpha** (`0.6.0-alpha`, versionCode 6) — a modern local-first Android music player focused on offline playback, local intelligence, advanced transitions, per-track personalization, privacy, and a contextual Spotify-style UX.
+**0.7Alpha** (`0.7.0-alpha`, versionCode 7) — a modern local-first Android music player focused on offline playback, local intelligence, advanced transitions, per-track personalization, privacy, and a contextual Spotify-style UX.
 
 NEO PLAYER keeps the complete original player capability set while reorganizing features into the context where they are expected: Home, Search, Your Library, Create, Now Playing, and Settings. Existing library, queue, playlists, favorites, categories, lyrics, themes, audio effects, search, widget, playback controls, collection tools, NEO+, Track+, and Offline Pro capabilities remain available.
 
-> Current public release: **v0.6.0-alpha — NEO PLAYER 0.6Alpha**
+> Current release: **v0.7.0-alpha — NEO PLAYER 0.7Alpha**
 >
-> [Download NEO-PLAYER-0.6Alpha-release.apk](https://github.com/Realjustawall/neo-player/releases/download/v0.6.0-alpha/NEO-PLAYER-0.6Alpha-release.apk)  
-> [Open the v0.6.0-alpha release](https://github.com/Realjustawall/neo-player/releases/tag/v0.6.0-alpha)
+> [Download NEO-PLAYER-0.7Alpha-release.apk](https://github.com/Realjustawall/neo-player/releases/download/v0.7.0-alpha/NEO-PLAYER-0.7Alpha-release.apk)
+> [Open the v0.7.0-alpha release](https://github.com/Realjustawall/neo-player/releases/tag/v0.7.0-alpha)
 >
-> Release APK: **45,903,128 bytes**  
-> Release AAB: **22,764,208 bytes**
+> The release workflow rejects any APK that is not larger than the complete 0.6Alpha package.
 
-## 0.6Alpha highlights
+## 0.7Alpha highlights
+
+- reliable live English/Persian switching with complete localized contextual navigation
+- one-level Back behavior throughout nested player and advanced-tool panels
+- complete Liked Songs view
+- per-track audio-effect panel with independent equalizer, bass, virtualizer and loudness switches
+- Local Radio with Bluetooth proximity advertising, secure QR joining, synchronized local-network playback, connected-listener visibility, individual removal and disconnect-all
+- all existing NEO+, Track+, Offline Pro, playback, library, lyrics, playlist and visual capabilities retained
+
+## 0.6Alpha foundation
 
 ### Contextual Spotify-style UX
 
@@ -200,14 +208,14 @@ The Full-Offline build is intentionally much larger. The normal Play-oriented Re
 
 Current release:
 
-**NEO PLAYER 0.6Alpha — `v0.6.0-alpha`**
+**NEO PLAYER 0.7Alpha — `v0.7.0-alpha`**
 
 Published release assets:
 
-- `NEO-PLAYER-0.6Alpha-release.apk` — **45,903,128 bytes**
-- `NEO-PLAYER-0.6Alpha-release.aab` — **22,764,208 bytes**
-- `RELEASE_ALPHA06_BUILD.txt` — build/signature metadata
-- `INSTALL_ALPHA06_KVM_VERIFICATION.txt` — install/launch verification evidence
+- `NEO-PLAYER-0.7Alpha-release.apk`
+- `NEO-PLAYER-0.7Alpha-release.aab`
+- `RELEASE_ALPHA07_BUILD.txt` — build/signature metadata
+- `INSTALL_ALPHA07_KVM_VERIFICATION.txt` — install/launch verification evidence
 
 The release candidate passed JVM unit tests, Android Lint, Release APK/AAB assembly, APK signature verification, 16 KiB zip-alignment verification, Android 14 / API 34 x86_64 KVM installation, app launch, and runtime process-health checks before publishing.
 
@@ -217,9 +225,9 @@ Optional production signing is supported through release signing environment/sec
 
 ## Database migration
 
-The current Room database version is **v6**. Migrations are additive and preserve existing user data. New tables/columns cover Track+ visuals, offline lyrics transcripts/models, recommendation feedback, advanced audio analysis, ReplayGain/normalization metadata and Offline Backup-related state.
+The current Room database version is **v7**. Migrations are additive and preserve existing user data. Version 7 adds independent per-track effect switches while retaining all Track+, offline lyrics, recommendation, analysis, ReplayGain and Offline Backup data.
 
-No destructive migration is used for the 0.6Alpha upgrade path.
+No destructive migration is used for the 0.7Alpha upgrade path.
 
 ## Permissions and privacy
 

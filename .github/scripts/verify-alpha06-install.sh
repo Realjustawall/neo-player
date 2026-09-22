@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-APK="$GITHUB_WORKSPACE/candidate/NEO-PLAYER-0.6Alpha-release.apk"
+APK="$GITHUB_WORKSPACE/candidate/NEO-PLAYER-0.7Alpha-release.apk"
 
 echo "Waiting for fully booted emulator..."
 adb wait-for-device
@@ -19,10 +19,10 @@ adb shell pm path com.neoplayer.app | tee package-path.txt
 grep -q 'package:' package-path.txt
 
 adb shell dumpsys package com.neoplayer.app \
-  | grep -E 'versionCode=6|versionName=0.6.0-alpha' \
+  | grep -E 'versionCode=7|versionName=0.7.0-alpha' \
   | tee package-version.txt
-grep -q 'versionCode=6' package-version.txt
-grep -q 'versionName=0.6.0-alpha' package-version.txt
+grep -q 'versionCode=7' package-version.txt
+grep -q 'versionName=0.7.0-alpha' package-version.txt
 
 adb logcat -c
 adb shell am force-stop com.neoplayer.app
@@ -49,5 +49,5 @@ if grep -E -i 'FATAL EXCEPTION.*|Process: com\.neoplayer\.app' logcat.txt > cras
   exit 43
 fi
 
-printf 'INSTALL_TEST=PASS\nEMULATOR=Android_14_API_34_default_x86_64_KVM\nRUNNER=ubuntu-latest\nPACKAGE=com.neoplayer.app\nVERSION_CODE=6\nVERSION_NAME=0.6.0-alpha\nPID=%s\n' "$PID" \
-  | tee INSTALL_ALPHA06_KVM_VERIFICATION.txt
+printf 'INSTALL_TEST=PASS\nEMULATOR=Android_14_API_34_default_x86_64_KVM\nRUNNER=ubuntu-latest\nPACKAGE=com.neoplayer.app\nVERSION_CODE=7\nVERSION_NAME=0.7.0-alpha\nPID=%s\n' "$PID" \
+  | tee INSTALL_ALPHA07_KVM_VERIFICATION.txt

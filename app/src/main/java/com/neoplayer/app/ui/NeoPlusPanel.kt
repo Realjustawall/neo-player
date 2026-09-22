@@ -1,5 +1,6 @@
 package com.neoplayer.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -101,6 +102,7 @@ fun NeoPlayerEnhancedApp(mainViewModel: MainViewModel, plusViewModel: NeoPlusVie
 
 @Composable
 private fun NeoPlusPanel(vm: NeoPlusViewModel, section: NeoPlusSection, close: () -> Unit) {
+    BackHandler(onBack = close)
     val settings by vm.settings.collectAsState()
     val fa = settings.language == "fa" || (settings.language == "system" && Locale.getDefault().language == "fa")
     val title = when (section) {

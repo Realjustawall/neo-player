@@ -66,6 +66,7 @@ import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -82,6 +83,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Queue
 import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
@@ -127,6 +129,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -223,8 +226,11 @@ private fun PermissionGate(vm: MainViewModel, content: @Composable () -> Unit) {
 @Composable
 private fun PlayerShell(vm: MainViewModel) {
     var destination by rememberSaveable { mutableStateOf(Destination.HOME) }
+    val destinationHistory = remember { mutableStateListOf<Destination>() }
     var fullPlayer by rememberSaveable { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var localRadioOpen by rememberSaveable { mutableStateOf(false) }
+    var likedSongsOpen by rememberSaveable { mutableStateOf(false) }
     var createOpen by rememberSaveable { mutableStateOf(false) }
     var createTarget by rememberSaveable { mutableStateOf<String?>(null) }
     val playback by vm.playback.collectAsState()
@@ -242,7 +248,12 @@ private fun PlayerShell(vm: MainViewModel) {
                     Destination.entries.forEach { item ->
                         NavigationBarItem(
                             selected = destination == item,
-                            onClick = { destination = item },
+                            onClick = {
+                                if (destination != item) {
+                                    destinationHistory += destination
+                                    destination = item
+                                }
+                            },
                             icon = { Icon(item.icon, stringResource(item.label)) },
                             label = { Text(stringResource(item.label)) }
                         )
@@ -259,7 +270,7 @@ private fun PlayerShell(vm: MainViewModel) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (destination) {
-                Destination.HOME -> HomeScreen(vm) { settingsOpen = true }
+                Destination.HOME -> HomeScreen(vm, openSettings = { settingsOpen = true }, openLiked = { likedSongsOpen = true })
                 Destination.SEARCH -> SearchScreen(vm)
                 Destination.LIBRARY -> LibraryScreen(vm, ux)
             }
@@ -269,7 +280,7 @@ private fun PlayerShell(vm: MainViewModel) {
         fullPlayer,
         enter = if (settings.reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
         exit = if (settings.reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut()
-    ) { NowPlayingScreen(vm) { fullPlayer = false } }
+    ) { NowPlayingScreen(vm, close = { fullPlayer = false }, openLocalRadio = { localRadioOpen = true }) }
     AnimatedVisibility(
         settingsOpen,
         enter = if (settings.reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
@@ -279,6 +290,16 @@ private fun PlayerShell(vm: MainViewModel) {
             SettingsScreen(vm) { settingsOpen = false }
         }
     }
+    AnimatedVisibility(
+        localRadioOpen,
+        enter = if (settings.reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
+        exit = if (settings.reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut()
+    ) { LocalRadioPanel(vm) { localRadioOpen = false } }
+    AnimatedVisibility(
+        likedSongsOpen,
+        enter = if (settings.reduceMotion) EnterTransition.None else slideInVertically { it } + fadeIn(),
+        exit = if (settings.reduceMotion) ExitTransition.None else slideOutVertically { it } + fadeOut()
+    ) { LikedSongsScreen(vm) { likedSongsOpen = false } }
     if (createOpen) {
         CreateMenu(
             dismiss = { createOpen = false },
@@ -297,8 +318,11 @@ private fun PlayerShell(vm: MainViewModel) {
             createTarget = null
         }
     }
-    BackHandler(fullPlayer || settingsOpen) {
-        if (settingsOpen) settingsOpen = false else fullPlayer = false
+    BackHandler(!fullPlayer && !localRadioOpen && !likedSongsOpen && (settingsOpen || destinationHistory.isNotEmpty())) {
+        when {
+            settingsOpen -> settingsOpen = false
+            destinationHistory.isNotEmpty() -> destination = destinationHistory.removeAt(destinationHistory.lastIndex)
+        }
     }
 }
 
@@ -349,7 +373,7 @@ private fun ScreenHeader(title: String, subtitle: String? = null, action: (@Comp
 }
 
 @Composable
-private fun HomeScreen(vm: MainViewModel, openSettings: () -> Unit) {
+private fun HomeScreen(vm: MainViewModel, openSettings: () -> Unit, openLiked: () -> Unit) {
     val songs by vm.songs.collectAsState()
     val favorites by vm.favoriteIds.collectAsState()
     val histories by vm.histories.collectAsState()
@@ -373,7 +397,7 @@ private fun HomeScreen(vm: MainViewModel, openSettings: () -> Unit) {
         else {
             item { SectionTitle(stringResource(R.string.recently_added)) }
             items(recentSongs, key = { "recent-${it.id}" }) { SongRow(it, favorites.contains(it.id), vm, recentSongs) }
-            item { SectionTitle(stringResource(R.string.liked_songs)) }
+            item { SectionTitle(stringResource(R.string.liked_songs), stringResource(R.string.view_all), openLiked) }
             if (liked.isEmpty()) item { HintCard(stringResource(R.string.favorites_hint)) }
             items(liked, key = { "liked-${it.id}" }) { SongRow(it, true, vm, liked) }
             item { SectionTitle(stringResource(R.string.smart_mixes)) }
@@ -401,7 +425,27 @@ private fun HomeScreen(vm: MainViewModel, openSettings: () -> Unit) {
     }
 }
 
-@Composable private fun SectionTitle(text: String) = Text(text, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 8.dp))
+@Composable private fun SectionTitle(text: String, actionLabel: String? = null, action: (() -> Unit)? = null) = Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+    Text(text, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+    if (actionLabel != null && action != null) TextButton(action) { Text(actionLabel) }
+}
+
+@Composable private fun LikedSongsScreen(vm: MainViewModel, close: () -> Unit) {
+    val songs by vm.songs.collectAsState()
+    val favorites by vm.favoriteIds.collectAsState()
+    val liked = remember(songs, favorites) { songs.filter { it.id in favorites } }
+    BackHandler(onBack = close)
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) }
+                Text(stringResource(R.string.liked_songs), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            }
+            if (liked.isEmpty()) HintCard(stringResource(R.string.favorites_hint))
+            else LazyColumn { items(liked, key = { it.id }) { SongRow(it, true, vm, liked) } }
+        }
+    }
+}
 
 @Composable
 private fun EmptyLibrary(vm: MainViewModel) {
@@ -448,7 +492,7 @@ private fun SearchScreen(vm: MainViewModel) {
                 IconButton({ menu = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more)) }
                 DropdownMenu(menu, { menu = false }) {
                     DropdownMenuItem(
-                        text = { Text("Search history & suggestions") },
+                        text = { Text(stringResource(R.string.search_history_suggestions)) },
                         onClick = { menu = false; ux.openNeoPlus(NeoPlusSection.SEARCH) }
                     )
                 }
@@ -530,30 +574,30 @@ private fun LibraryScreen(vm: MainViewModel, ux: NeoUxActions) {
                 DropdownMenu(menu, { menu = false }) {
                     when (tab) {
                         1 -> DropdownMenuItem(
-                            text = { Text("Organize albums") },
+                            text = { Text(stringResource(R.string.organize_albums)) },
                             onClick = { menu = false; ux.openCollections(CollectionSection.ALBUMS) }
                         )
                         2 -> DropdownMenuItem(
-                            text = { Text("Organize artists") },
+                            text = { Text(stringResource(R.string.organize_artists)) },
                             onClick = { menu = false; ux.openCollections(CollectionSection.ARTISTS) }
                         )
                         5 -> {
                             DropdownMenuItem(
-                                text = { Text("Playlist folders") },
+                                text = { Text(stringResource(R.string.playlist_folders)) },
                                 onClick = { menu = false; ux.openCollections(CollectionSection.PLAYLIST_FOLDERS) }
                             )
                             DropdownMenuItem(
-                                text = { Text("Playlist management") },
+                                text = { Text(stringResource(R.string.playlist_management)) },
                                 onClick = { menu = false; ux.openNeoPlus(NeoPlusSection.PLAYLISTS) }
                             )
                             DropdownMenuItem(
-                                text = { Text("Advanced playlist tools") },
+                                text = { Text(stringResource(R.string.advanced_playlist_tools)) },
                                 onClick = { menu = false; ux.openOfflinePro(OfflineProSection.PLAYLISTS) }
                             )
                         }
                     }
                     DropdownMenuItem(
-                        text = { Text("Library settings") },
+                        text = { Text(stringResource(R.string.library_settings)) },
                         onClick = { menu = false; ux.openNeoPlus(NeoPlusSection.LIBRARY) }
                     )
                     DropdownMenuItem(
@@ -852,7 +896,7 @@ private fun MiniPlayer(vm: MainViewModel, open: () -> Unit) {
 }
 
 @Composable
-private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
+private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit, openLocalRadio: () -> Unit) {
     val state by vm.playback.collectAsState(); val item = state.current ?: return
     val settings by vm.settings.collectAsState()
     val library by vm.songs.collectAsState()
@@ -865,6 +909,14 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
     var moreMenu by remember { mutableStateOf(false) }
     var addToPlaylist by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf(false) }
+    var effectsOpen by remember { mutableStateOf(false) }
+    BackHandler {
+        when {
+            effectsOpen -> effectsOpen = false
+            panel != "player" -> panel = "player"
+            else -> close()
+        }
+    }
     LaunchedEffect(state.playing) { while (state.playing) { delay(500); vm.refreshPosition() } }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
@@ -894,28 +946,32 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
                                     onClick = { moreMenu = false; vm.startRadio(song) }
                                 )
                                 DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.local_radio)) },
+                                    onClick = { moreMenu = false; openLocalRadio() }
+                                )
+                                DropdownMenuItem(
                                     text = { Text(stringResource(R.string.add_to_queue)) },
                                     onClick = { moreMenu = false; vm.addQueue(song) }
                                 )
                             }
                             DropdownMenuItem(
-                                text = { Text("Track appearance") },
+                                text = { Text(stringResource(R.string.track_appearance)) },
                                 onClick = { moreMenu = false; ux.openTrackTools(TrackToolsSection.VISUAL) }
                             )
                             DropdownMenuItem(
-                                text = { Text("Lyrics AI") },
+                                text = { Text(stringResource(R.string.lyrics_ai)) },
                                 onClick = { moreMenu = false; ux.openTrackTools(TrackToolsSection.LYRICS_AI) }
                             )
                             DropdownMenuItem(
-                                text = { Text("More like this") },
+                                text = { Text(stringResource(R.string.more_like_this)) },
                                 onClick = { moreMenu = false; ux.openTrackTools(TrackToolsSection.RECOMMENDATIONS) }
                             )
                             DropdownMenuItem(
-                                text = { Text("Audio analysis") },
+                                text = { Text(stringResource(R.string.audio_analysis)) },
                                 onClick = { moreMenu = false; ux.openOfflinePro(OfflineProSection.ANALYSIS) }
                             )
                             DropdownMenuItem(
-                                text = { Text("Advanced visuals") },
+                                text = { Text(stringResource(R.string.advanced_visuals)) },
                                 onClick = { moreMenu = false; ux.openOfflinePro(OfflineProSection.VISUAL_PRO) }
                             )
                             currentSong?.let { song ->
@@ -939,7 +995,7 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
                 when (panel) {
                     "queue" -> QueuePanel(vm)
                     "lyrics" -> LyricsPanel(vm, item.mediaId.toLongOrNull() ?: -1, state.positionMs)
-                    else -> PlayerPanel(vm, openQueue = { panel = "queue" }, openLyrics = { panel = "lyrics" })
+                    else -> PlayerPanel(vm, openQueue = { panel = "queue" }, openLyrics = { panel = "lyrics" }, openEffects = { effectsOpen = true }, openLocalRadio = openLocalRadio)
                 }
             }
         }
@@ -966,9 +1022,10 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
         )
     }
     if (info && currentSong != null) SongInfo(currentSong) { info = false }
+    if (effectsOpen) AudioEffectsPanel(vm) { effectsOpen = false }
 }
 
-@Composable private fun PlayerPanel(vm: MainViewModel, openQueue: () -> Unit, openLyrics: () -> Unit) {
+@Composable private fun PlayerPanel(vm: MainViewModel, openQueue: () -> Unit, openLyrics: () -> Unit, openEffects: () -> Unit, openLocalRadio: () -> Unit) {
     val state by vm.playback.collectAsState(); val item = state.current ?: return
     val favorites by vm.favoriteIds.collectAsState(); val id = item.mediaId.toLongOrNull()
     var speedMenu by remember { mutableStateOf(false) }
@@ -996,9 +1053,11 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
             IconButton(vm::cycleRepeat) { Icon(if (state.repeatMode == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat, stringResource(R.string.repeat), tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface) }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(openEffects) { Icon(Icons.Rounded.GraphicEq, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.audio_effects)) }
             TextButton(openLyrics) { Icon(Icons.Rounded.Lyrics, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.lyrics)) }
             TextButton(openQueue) { Icon(Icons.Rounded.QueueMusic, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.queue)) }
         }
+        TextButton(openLocalRadio) { Icon(Icons.Rounded.Radio, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.local_radio)) }
         Box {
             TextButton({ speedMenu = true }) { Icon(Icons.Rounded.Speed, null); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.playback_speed)) }
             DropdownMenu(speedMenu, { speedMenu = false }) { listOf(.5f, .75f, 1f, 1.25f, 1.5f, 2f).forEach { speed -> DropdownMenuItem({ Text("${speed}×") }, { vm.setSpeed(speed); speedMenu = false }) } }
@@ -1119,6 +1178,54 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
     }
 }
 
+@Composable private fun AudioEffectsPanel(vm: MainViewModel, close: () -> Unit) {
+    val effects by vm.audioEffects.collectAsState()
+    val playback by vm.playback.collectAsState()
+    BackHandler(onBack = close)
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        LazyColumn(Modifier.fillMaxSize()) {
+            item {
+                Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) }
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.audio_effects), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            playback.current?.mediaMetadata?.title?.toString() ?: stringResource(R.string.no_active_track),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+            item { HintCard(stringResource(R.string.audio_effects_summary)) }
+            item { ToggleRow(stringResource(R.string.enable_equalizer), stringResource(R.string.equalizer), effects.equalizerEnabled, vm::setEqualizerEnabled) }
+            item {
+                ChoiceRow(
+                    stringResource(R.string.equalizer),
+                    listOf(
+                        stringResource(R.string.normal), stringResource(R.string.bass_boost), stringResource(R.string.rock),
+                        stringResource(R.string.pop), stringResource(R.string.classical), stringResource(R.string.jazz),
+                        stringResource(R.string.electronic), stringResource(R.string.vocal), stringResource(R.string.custom)
+                    ),
+                    vm.audioPresets.indexOf(effects.preset).coerceAtLeast(0),
+                    { index -> vm.setAudioPreset(vm.audioPresets[index]) }
+                )
+            }
+            if (effects.preset == "Custom") itemsIndexed(effects.bandLevels) { index, level ->
+                EffectSlider(stringResource(R.string.band_number, index + 1), level.toInt() + 1500, 3000) { vm.setEqualizerBand(index, (it - 1500).toShort()) }
+            }
+            item { ToggleRow(stringResource(R.string.enable_bass), stringResource(R.string.bass_boost), effects.bassEnabled, vm::setBassEnabled) }
+            item { EffectSlider(stringResource(R.string.bass_boost), effects.bass, 1000, vm::setBass) }
+            item { ToggleRow(stringResource(R.string.enable_virtualizer), stringResource(R.string.virtualizer), effects.virtualizerEnabled, vm::setVirtualizerEnabled) }
+            item { EffectSlider(stringResource(R.string.virtualizer), effects.virtualizer, 1000, vm::setVirtualizer) }
+            item { ToggleRow(stringResource(R.string.enable_loudness), stringResource(R.string.loudness), effects.loudnessEnabled, vm::setLoudnessEnabled) }
+            item { EffectSlider(stringResource(R.string.loudness), effects.loudnessMb, 1200, vm::setLoudness) }
+            item { Spacer(Modifier.height(40.dp)) }
+        }
+    }
+}
+
 @Composable private fun SettingsScreen(vm: MainViewModel, close: (() -> Unit)? = null) {
     val settings by vm.settings.collectAsState(); var customDialog by remember { mutableStateOf(false) }; var clearHistory by remember { mutableStateOf(false) }
     val playback by vm.playback.collectAsState()
@@ -1155,14 +1262,14 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
             AppCompatDelegate.setApplicationLocales(if (tag == "system") LocaleListCompat.getEmptyLocaleList() else LocaleListCompat.forLanguageTags(tag))
         } }
         item { SettingsTitle(stringResource(R.string.library)) }
-        item { SettingsAction(Icons.Rounded.LibraryMusic, "Library settings", "Source folders, hidden songs and library layout", { ux.openNeoPlus(NeoPlusSection.LIBRARY) }) }
+        item { SettingsAction(Icons.Rounded.LibraryMusic, stringResource(R.string.library_settings), stringResource(R.string.library_settings_summary), { ux.openNeoPlus(NeoPlusSection.LIBRARY) }) }
         item { SettingsAction(Icons.Rounded.Refresh, stringResource(R.string.rescan), stringResource(R.string.rescan_summary), vm::rescan) }
         item { ChoiceRow(stringResource(R.string.minimum_audio_duration), listOf("0s", "10s", "30s", "60s"), listOf(0L, 10_000L, 30_000L, 60_000L).indexOf(settings.minDurationMs).coerceAtLeast(0)) { vm.setMinDuration(listOf(0L, 10_000L, 30_000L, 60_000L)[it]) } }
         if (excluded.isNotEmpty()) item { Column { Text(stringResource(R.string.excluded_folders), Modifier.padding(horizontal = 20.dp)); excluded.forEach { path -> Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Text(path, Modifier.weight(1f)); TextButton({ vm.includeFolder(path) }) { Text(stringResource(R.string.include)) } } } } }
         item { SettingsTitle(stringResource(R.string.playback)) }
         item { ChoiceRow(stringResource(R.string.crossfade), listOf(stringResource(R.string.off), "3s", "5s", "8s", "12s"), listOf(0L, 3_000L, 5_000L, 8_000L, 12_000L).indexOf(settings.crossfadeMs).coerceAtLeast(0)) { vm.setCrossfadeMs(listOf(0L, 3_000L, 5_000L, 8_000L, 12_000L)[it]) } }
         item { HintCard(stringResource(R.string.gapless_automatic)) }
-        item { SettingsAction(Icons.Rounded.MusicNote, "Advanced playback", "Loudness normalization, AutoMix and transition controls", { ux.openNeoPlus(NeoPlusSection.AUDIO) }) }
+        item { SettingsAction(Icons.Rounded.MusicNote, stringResource(R.string.advanced_playback), stringResource(R.string.advanced_playback_summary), { ux.openNeoPlus(NeoPlusSection.AUDIO) }) }
         item { SettingsTitle(stringResource(R.string.audio)) }
         item { HintCard(stringResource(R.string.track_effect_profile) + (playback.current?.mediaMetadata?.title?.toString()?.let { " • $it" } ?: "") + "\n" + stringResource(R.string.track_effect_profile_summary)) }
         if (audioEffects.available) {
@@ -1172,19 +1279,19 @@ private fun NowPlayingScreen(vm: MainViewModel, close: () -> Unit) {
             item { EffectSlider(stringResource(R.string.loudness), audioEffects.loudnessMb, 1200, vm::setLoudness) }
             if (audioEffects.preset == "Custom") itemsIndexed(audioEffects.bandLevels) { index, level -> EffectSlider(stringResource(R.string.band_number, index + 1), level.toInt() + 1500, 3000) { vm.setEqualizerBand(index, (it - 1500).toShort()) } }
         } else if (equalizerIntent.resolveActivity(context.packageManager) != null) item { SettingsAction(Icons.Rounded.MusicNote, stringResource(R.string.equalizer), stringResource(R.string.equalizer_unavailable_summary), { context.startActivity(equalizerIntent) }) }
-        item { SettingsAction(Icons.Rounded.MusicNote, "Audio analysis", "Deep on-device analysis and ReplayGain/R128 tools", { ux.openOfflinePro(OfflineProSection.ANALYSIS) }) }
+        item { SettingsAction(Icons.Rounded.MusicNote, stringResource(R.string.audio_analysis), stringResource(R.string.audio_analysis_summary), { ux.openOfflinePro(OfflineProSection.ANALYSIS) }) }
         item { SettingsTitle(stringResource(R.string.lyrics)) }
         item { val modes = if (vm.onlineLyricsAvailable) listOf(stringResource(R.string.auto), stringResource(R.string.offline_only), stringResource(R.string.online_only)) else listOf(stringResource(R.string.auto), stringResource(R.string.offline_only)); ChoiceRow(stringResource(R.string.lyrics_source), modes, if (settings.lyricsMode == "offline") 1 else if (settings.lyricsMode == "online" && vm.onlineLyricsAvailable) 2 else 0) { vm.setLyricsMode(if (it == 1) "offline" else if (it == 2) "online" else "auto") } }
         item { ChoiceRow(stringResource(R.string.lyrics_size), listOf("16", "20", "24", "28"), listOf(16, 20, 24, 28).indexOf(settings.lyricsFontSize).coerceAtLeast(1)) { vm.setLyricsFontSize(listOf(16, 20, 24, 28)[it]) } }
-        item { SettingsTitle("Storage & offline") }
-        item { SettingsAction(Icons.Rounded.Folder, "Storage & cache", "View and clear regeneratable local cache", { ux.openNeoPlus(NeoPlusSection.CACHE) }) }
-        item { SettingsAction(Icons.Rounded.QueueMusic, "Offline Backup", "Smart local backup generated from your listening", { ux.openOfflinePro(OfflineProSection.BACKUP) }) }
-        item { SettingsAction(Icons.Rounded.Info, "Offline mode", "Strict local-only and network behavior", { ux.openOfflinePro(OfflineProSection.OFFLINE_MODE) }) }
+        item { SettingsTitle(stringResource(R.string.storage_offline)) }
+        item { SettingsAction(Icons.Rounded.Folder, stringResource(R.string.storage_cache), stringResource(R.string.storage_cache_summary), { ux.openNeoPlus(NeoPlusSection.CACHE) }) }
+        item { SettingsAction(Icons.Rounded.QueueMusic, stringResource(R.string.offline_backup), stringResource(R.string.offline_backup_summary), { ux.openOfflinePro(OfflineProSection.BACKUP) }) }
+        item { SettingsAction(Icons.Rounded.Info, stringResource(R.string.offline_mode), stringResource(R.string.offline_mode_summary), { ux.openOfflinePro(OfflineProSection.OFFLINE_MODE) }) }
         item { SettingsTitle(stringResource(R.string.privacy)) }
         item { HintCard(stringResource(R.string.privacy_summary)) }
         item { SettingsAction(Icons.Rounded.History, stringResource(R.string.clear_history), stringResource(R.string.clear_history_summary), { clearHistory = true }) }
         item { SettingsTitle(stringResource(R.string.about)) }
-        item { Column(Modifier.padding(20.dp)) { Text("NEO PLAYER", style = MaterialTheme.typography.titleLarge); Text(BuildConfig.DISPLAY_VERSION + " • " + BuildConfig.VERSION_NAME); Spacer(Modifier.height(8.dp)); Text(stringResource(R.string.app_description)); Text(stringResource(R.string.made_by), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp)); Text(stringResource(R.string.build_number, BuildConfig.VERSION_CODE) + "\nLicense: Apache-2.0") } }
+        item { Column(Modifier.padding(20.dp)) { Text("NEO PLAYER", style = MaterialTheme.typography.titleLarge); Text(BuildConfig.DISPLAY_VERSION + " • " + BuildConfig.VERSION_NAME); Spacer(Modifier.height(8.dp)); Text(stringResource(R.string.app_description)); Text(stringResource(R.string.made_by), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp)); Text(stringResource(R.string.build_number, BuildConfig.VERSION_CODE) + "\n" + stringResource(R.string.license_name)) } }
         item { Spacer(Modifier.height(20.dp)) }
     }
     if (customDialog) CustomColorDialog({ customDialog = false }) { vm.setCustomColor(it); customDialog = false }

@@ -132,11 +132,11 @@ android {
         applicationId = "com.neoplayer.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.6.0-alpha"
+        versionCode = 7
+        versionName = "0.7.0-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
-        buildConfigField("String", "DISPLAY_VERSION", "\"0.6Alpha\"")
+        buildConfigField("String", "DISPLAY_VERSION", "\"0.7Alpha\"")
         buildConfigField("String", "LYRICS_API_BASE", quotedBuildValue(lyricsApiBase))
         buildConfigField("String", "LYRICS_API_KEY", quotedBuildValue(lyricsApiKey))
         buildConfigField("boolean", "SIGNED_RELEASE", hasReleaseSigning.toString())
@@ -216,6 +216,10 @@ dependencies {
     implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("com.google.guava:guava:33.3.1-android")
+    // Local Radio is an additive on-device stream and QR join flow. Existing playback remains
+    // independent and continues to work when these optional capabilities are unused.
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     // Fully offline speech-to-text after one-time model preparation. The default release keeps the
     // engine in the APK and stores selected official/imported models in app-private storage.
