@@ -22,9 +22,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v0.8.0-alpha --repo "$GITHUB_REPOSITORY" --pattern NEO-PLAYER-0.8Alpha-release.apk
+          curl --fail --location --connect-timeout 15 --max-time 180 --retry 1 --output NEO-PLAYER-0.8Alpha-release.apk https://github.com/Realjustawall/neo-player/releases/download/v0.8.0-alpha/NEO-PLAYER-0.8Alpha-release.apk
+          echo "8214014ab33a197dc527f5a830c48d93032b4f60db7280f6aecae78237222d4b  NEO-PLAYER-0.8Alpha-release.apk" | sha256sum --check
           sha256sum NEO-PLAYER-0.8Alpha-release.apk
-          command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y ffmpeg)
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
