@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Capture the released Android UI with disposable local music and locale fixtures."""
 from pathlib import Path
-import subprocess, time, re, json, xml.etree.ElementTree as ET, struct, wave, math, shlex
+import subprocess, time, re, json, xml.etree.ElementTree as ET, struct, wave, math, shlex, zipfile
 OUT=Path('android-readme-captures');OUT.mkdir(exist_ok=True)
 PACKAGE='com.neoplayer.app'
 
@@ -57,14 +57,9 @@ shell('settings','put','global','window_animation_scale','0');shell('settings','
 shell('settings','put','system','screen_off_timeout','2147483647');shell('input','keyevent','82')
 # Real, generated audio fixtures; no app source or UI is replaced.
 Path('audio-fixtures').mkdir(exist_ok=True)
-for i,title in enumerate(['First Light','Blue Horizon','Midnight Signal']):
- p=Path('audio-fixtures')/(title+'.wav')
- rate=22050
- with wave.open(str(p),'wb') as w:
-  w.setnchannels(1);w.setsampwidth(2);w.setframerate(rate)
-  block=b''.join(struct.pack('<h',int(700*math.sin(2*math.pi*(220+i*55)*t/rate))) for t in range(rate))
-  w.writeframes(block*36)
- adb('push',p,'/sdcard/Music/'+title+'.wav');shell('am','broadcast','-a','android.intent.action.MEDIA_SCANNER_SCAN_FILE','-d','file:///sdcard/Music/'+title+'.wav',check=False)
+with zipfile.ZipFile('.github/fixtures/readme-audio.zip') as z:z.extractall('audio-fixtures')
+for p in sorted(Path('audio-fixtures').glob('*.mp3')):
+ adb('push',p,'/sdcard/Music/'+p.name);shell('am','broadcast','-a','android.intent.action.MEDIA_SCANNER_SCAN_FILE','-d','file:///sdcard/Music/'+p.name,check=False)
 shell('am','broadcast','-a','android.intent.action.MEDIA_MOUNTED','-d','file:///sdcard',check=False)
 time.sleep(5)
 for lang in ['en','fa']:
@@ -86,5 +81,5 @@ for lang in ['en','fa']:
  tap_match(lang+'-home-nav',[r'^Home$',r'^خانه$']);time.sleep(1)
  if tap_match(lang+'-settings-nav',[r'^Settings$',r'^تنظیمات$',r'settings']):capture(lang,'04-settings')
  (OUT/(lang+'-logcat.txt')).write_bytes(adb('logcat','-d','-t','1200',check=False))
-(OUT/'provenance.json').write_text(json.dumps({'app':'NEO Player','release':'v0.8.0-alpha','runtime':'Android API 34 x86_64 emulator with KVM on GitHub Actions','capture':'adb exec-out screencap -p','fixtures':'Generated local WAV files and language preference in disposable emulator; original signed APK unmodified','display':'1080x2400 pixels, density 420 dpi','apk_sha256':__import__('hashlib').sha256(Path('NEO-PLAYER-0.8Alpha-release.apk').read_bytes()).hexdigest()},indent=2))
+(OUT/'provenance.json').write_text(json.dumps({'app':'NEO Player','release':'v0.8.0-alpha','runtime':'Android API 34 x86_64 emulator with KVM on GitHub Actions','capture':'adb exec-out screencap -p','fixtures':'Generated local MP3 tones with fictional Demo Sessions metadata and the repository NEO logo as cover art and language preference in disposable emulator; original signed APK unmodified','display':'1080x2400 pixels, density 420 dpi','apk_sha256':__import__('hashlib').sha256(Path('NEO-PLAYER-0.8Alpha-release.apk').read_bytes()).hexdigest()},indent=2))
 print('Captured',sorted(str(p) for p in OUT.rglob('*.png')),flush=True)
