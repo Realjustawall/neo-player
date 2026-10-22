@@ -49,6 +49,7 @@ def language_fixture(lang):
  shell('restorecon','-RF',f'/data/user/0/{PACKAGE}/files',check=False)
 
 adb('root');adb('wait-for-device');time.sleep(2)
+shell('wm','size','1080x2400');shell('wm','density','420');time.sleep(2)
 adb('install','-r','NEO-PLAYER-0.8Alpha-release.apk',timeout=180)
 for permission in ['android.permission.READ_MEDIA_AUDIO','android.permission.POST_NOTIFICATIONS','android.permission.READ_EXTERNAL_STORAGE']:
  shell('pm','grant',PACKAGE,permission,check=False)
@@ -70,6 +71,7 @@ for lang in ['en','fa']:
  language_fixture(lang);shell('cmd','locale','set-app-locales',PACKAGE,'--user','0','--locales',lang,check=False);shell('am','start','-n',PACKAGE+'/.MainActivity');time.sleep(8)
  # Dismiss an OS permission dialog only if one appears.
  tap_match(lang+'-permissions',[r'^Allow$',r'While using',r'اجازه',r'مجاز']);time.sleep(2)
+ if tap_match(lang+'-rescan',[r'^Rescan library$',r'^اسکن دوبارهٔ کتابخانه$']):time.sleep(3)
  capture(lang,'01-home')
  if tap_match(lang+'-library-nav',[r'^Library$',r'^کتابخانه$',r'^Songs$',r'^آهنگ‌ها$']):
   capture(lang,'02-library')
@@ -84,5 +86,5 @@ for lang in ['en','fa']:
  tap_match(lang+'-home-nav',[r'^Home$',r'^خانه$']);time.sleep(1)
  if tap_match(lang+'-settings-nav',[r'^Settings$',r'^تنظیمات$',r'settings']):capture(lang,'04-settings')
  (OUT/(lang+'-logcat.txt')).write_bytes(adb('logcat','-d','-t','1200',check=False))
-(OUT/'provenance.json').write_text(json.dumps({'app':'NEO Player','release':'v0.8.0-alpha','runtime':'Android API 34 x86_64 emulator with KVM on GitHub Actions','capture':'adb exec-out screencap -p','fixtures':'Generated local WAV files and language preference in disposable emulator; original signed APK unmodified','apk_sha256':__import__('hashlib').sha256(Path('NEO-PLAYER-0.8Alpha-release.apk').read_bytes()).hexdigest()},indent=2))
+(OUT/'provenance.json').write_text(json.dumps({'app':'NEO Player','release':'v0.8.0-alpha','runtime':'Android API 34 x86_64 emulator with KVM on GitHub Actions','capture':'adb exec-out screencap -p','fixtures':'Generated local WAV files and language preference in disposable emulator; original signed APK unmodified','display':'1080x2400 pixels, density 420 dpi','apk_sha256':__import__('hashlib').sha256(Path('NEO-PLAYER-0.8Alpha-release.apk').read_bytes()).hexdigest()},indent=2))
 print('Captured',sorted(str(p) for p in OUT.rglob('*.png')),flush=True)
