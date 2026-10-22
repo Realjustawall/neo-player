@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Capture the released Android UI with disposable local music and locale fixtures."""
 from pathlib import Path
-import subprocess, time, re, json, xml.etree.ElementTree as ET, struct, wave, math
+import subprocess, time, re, json, xml.etree.ElementTree as ET, struct, wave, math, shlex
 OUT=Path('android-readme-captures');OUT.mkdir(exist_ok=True)
 PACKAGE='com.neoplayer.app'
 
@@ -10,7 +10,7 @@ def adb(*args,timeout=90,check=True):
  if check and r.returncode:raise RuntimeError(f'adb {args}: {r.stderr.decode(errors="replace")} {r.stdout.decode(errors="replace")}')
  return r.stdout
 
-def shell(*args,**kw):return adb('shell',*args,**kw)
+def shell(*args,**kw):return adb('shell',' '.join(shlex.quote(str(arg)) for arg in args),**kw)
 def hierarchy(tag):
  shell('uiautomator','dump','/sdcard/readme-window.xml',check=False)
  data=shell('cat','/sdcard/readme-window.xml',check=False)
