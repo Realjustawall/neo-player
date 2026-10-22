@@ -38,9 +38,22 @@
 
 ## Preview
 
-Fresh Android screenshots are pending. The [release evidence](https://github.com/Realjustawall/neo-player/releases/tag/v0.8.0-alpha) contains installation/launch verification; companion desktop images are not used as Android screenshots.
+Captured from the unmodified signed Android v0.8.0-alpha APK on an Android API 34 emulator with KVM in GitHub Actions. Local audio and language preferences are disposable demo fixtures.
 
-[Open the full gallery](docs/gallery.en.md)
+<p align="center">
+<img src="docs/assets/screenshots/en/01-home.webp" alt="NEO Player Android — Home" width="250" />
+<img src="docs/assets/screenshots/en/02-library.webp" alt="NEO Player Android — Local music library" width="250" />
+<img src="docs/assets/screenshots/en/03-player.webp" alt="NEO Player Android — Now playing" width="250" />
+</p>
+
+<details>
+<summary>Settings preview</summary>
+
+<img src="docs/assets/screenshots/en/04-settings.webp" alt="Settings and appearance" width="300" />
+
+</details>
+
+[Open the full Android gallery](docs/gallery.en.md)
 
 <a id="quick-start"></a>
 

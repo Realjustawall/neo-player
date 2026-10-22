@@ -1,4 +1,73 @@
 {
   "source_commit": "bb86283f71fc1f42fc8f7dadb54b917fcd56d130",
-  "captures": []
+  "captures": [
+    {
+      "path": "docs/assets/screenshots/en/01-home.webp",
+      "language": "en",
+      "capture_method": "Signed release APK on KVM Android API 34 emulator; adb screencap; disposable local audio fixtures",
+      "source_png_sha256": "3e1b598ce67845b57535d44f756af9831433d93a4421d61c11fdcea325d93bca",
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "path": "docs/assets/screenshots/en/02-library.webp",
+      "language": "en",
+      "capture_method": "Signed release APK on KVM Android API 34 emulator; adb screencap; disposable local audio fixtures",
+      "source_png_sha256": "c972bdc4ad5304e59a2b094e5ddfa41aace1753c928475b3249a3d5eab17b4ac",
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "path": "docs/assets/screenshots/en/03-player.webp",
+      "language": "en",
+      "capture_method": "Signed release APK on KVM Android API 34 emulator; adb screencap; disposable local audio fixtures",
+      "source_png_sha256": "a8933f050567d466e2fc36138c60d60e4dc66192dc80b00cafc338c1429aaaca",
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "path": "docs/assets/screenshots/en/04-settings.webp",
+      "language": "en",
+      "capture_method": "Signed release APK on KVM Android API 34 emulator; adb screencap; disposable local audio fixtures",
+      "source_png_sha256": "239d226877574a3140c4f20f85479b295b0c96b390d9825abe0fd181ed3ba0cf",
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "path": "docs/assets/screenshots/fa/01-home.webp",
+      "language": "fa",
+      "capture_method": "Signed release APK on KVM Android API 34 emulator; adb screencap; disposable local audio fixtures",
+      "source_png_sha256": "0a6928f29cc0af98ed09cf3e3ce1bdf56bbab6226a8902e99a1cf4180b318fce",
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "path": "docs/assets/screenshots/fa/02-library.webp",
+      "language": "fa",
+      "capture_method": "Signed release APK on KVM Android API 34 emulator; adb screencap; disposable local audio fixtures",
+      "source_png_sha256": "6639259d2d54a474810cb13318943ad54503c7bd90e25070928024f0698a3c0a",
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "path": "docs/assets/screenshots/fa/03-player.webp",
+      "language": "fa",
+      "capture_method": "Signed release APK on KVM Android API 34 emulator; adb screencap; disposable local audio fixtures",
+      "source_png_sha256": "939f788db169b66edd0345b404c45730342dd4becb38ea1d7bcbd09d42ce1a15",
+      "width": 1080,
+      "height": 1920
+    },
+    {
+      "path": "docs/assets/screenshots/fa/04-settings.webp",
+      "language": "fa",
+      "capture_method": "Signed release APK on KVM Android API 34 emulator; adb screencap; disposable local audio fixtures",
+      "source_png_sha256": "741cd008ab51809e73639be061eea9abad6ada1f32b4ac8e2959d420e297a663",
+      "width": 1080,
+      "height": 1920
+    }
+  ],
+  "release_tag": "v0.8.0-alpha",
+  "apk_sha256": "8214014ab33a197dc527f5a830c48d93032b4f60db7280f6aecae78237222d4b",
+  "capture_workflow": "https://github.com/Realjustawall/neo-player/actions/runs/39770468394",
+  "capture_commit": "c7da2e0836148a4e6009ea766daba299002ff1f8"
 }

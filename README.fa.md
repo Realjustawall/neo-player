@@ -38,9 +38,22 @@
 
 ## پیش‌نمایش
 
-تصاویر تازهٔ اندروید هنوز آماده نیستند. [مدارک ریلیز](https://github.com/Realjustawall/neo-player/releases/tag/v0.8.0-alpha) شامل بررسی نصب و اجراست؛ تصاویر پروژهٔ دسکتاپ به‌عنوان عکس اندروید استفاده نشده‌اند.
+ثبت‌شده از APK رسمی و امضاشدهٔ اندروید v0.8.0-alpha، بدون تغییر برنامه، روی شبیه‌ساز Android API 34 با KVM در GitHub Actions. فایل‌های صوتی و تنظیم زبان، دادهٔ نمونهٔ موقت هستند.
 
-[مشاهدهٔ گالری کامل](docs/gallery.fa.md)
+<p align="center">
+<img src="docs/assets/screenshots/fa/01-home.webp" alt="NEO Player Android — خانه" width="250" />
+<img src="docs/assets/screenshots/fa/02-library.webp" alt="NEO Player Android — کتابخانهٔ موسیقی محلی" width="250" />
+<img src="docs/assets/screenshots/fa/03-player.webp" alt="NEO Player Android — در حال پخش" width="250" />
+</p>
+
+<details>
+<summary>پیش‌نمایش تنظیمات</summary>
+
+<img src="docs/assets/screenshots/fa/04-settings.webp" alt="تنظیمات و ظاهر" width="300" />
+
+</details>
+
+[مشاهدهٔ گالری کامل اندروید](docs/gallery.fa.md)
 
 <a id="quick-start"></a>
 
