@@ -4,7 +4,7 @@
 
 **An Android music player built around your local library, expressive playback, offline intelligence and Persian/English interfaces.**
 
-<img alt="Version" src="https://img.shields.io/badge/version-v0.8.0-alpha-ff8c30?style=flat-square" />
+<img alt="Version" src="https://img.shields.io/badge/version-v0.8.0--alpha-ff8c30?style=flat-square" />
 <img alt="Platform" src="https://img.shields.io/badge/platform-Android%208.0%2B-354158?style=flat-square" />
 <a href="https://github.com/Realjustawall/neo-player/actions/workflows/android-alpha.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/Realjustawall/neo-player/android-alpha.yml?branch=main&amp;label=CI&amp;style=flat-square" /></a>
 
